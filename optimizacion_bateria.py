@@ -97,7 +97,7 @@ def cargar_precios(fecha_str: str) -> np.ndarray:
 # CONSTRUCCIÓN DEL MODELO PYOMO
 # =============================================================================
 
-def construir_modelo(precios_compra, precios_venta=None):
+def construir_modelo(precios: np.ndarray):
     """
     Construye el modelo MILP de optimización de batería pura.
     Sin generación fotovoltaica — solo arbitraje + servicios de red.
@@ -105,27 +105,34 @@ def construir_modelo(precios_compra, precios_venta=None):
     Mercados modelados:
       · Arbitraje (OMIE): compra barato / vende caro
       · Reserva secundaria (aFRR): disponibilidad + activación up/down
-    """
-    if precios_venta is None:
-        precios_venta = precios_compra.copy()
 
+    Notación de precios:
+      · p[t]     — precio SPOT del mercado en t (puede ser negativo)
+      · p_eff[t] — precio efectivo de compra: max(p[t], 0)
+                   Evita que el modelo gane dinero comprando a precio negativo.
+    """
     model = pyo.ConcreteModel(name="Arbitraje_Bateria_Pura")
 
     T_set = range(1, 97)
     model.T = pyo.Set(initialize=T_set)
 
-    # Parámetros
-    model.p_buy       = pyo.Param(model.T, initialize={t: precios_compra[t-1] for t in T_set})
-    model.p_sell      = pyo.Param(model.T, initialize={t: precios_venta[t-1]  for t in T_set})
-    model.p_buy_eff   = pyo.Param(model.T, initialize={t: max(precios_compra[t-1], 0.0) for t in T_set})
-    model.E_max       = pyo.Param(initialize=E_MAX)
-    model.P_ch_max    = pyo.Param(initialize=P_CH_MAX)
-    model.P_dis_max   = pyo.Param(initialize=P_DIS_MAX)
-    model.eta         = pyo.Param(initialize=ETA)
-    model.SOC_min     = pyo.Param(initialize=SOC_MIN)
-    model.SOC_max     = pyo.Param(initialize=SOC_MAX)
-    model.SOC_init    = pyo.Param(initialize=SOC_INIT)
-    model.c_deg       = pyo.Param(initialize=C_DEG)
+    # --- Parámetros de precio ---
+    # p[t]: precio SPOT en el intervalo t (€/MWh) — puede ser negativo
+    model.p     = pyo.Param(model.T, initialize={t: precios[t-1] for t in T_set})
+    # p_eff[t]: precio efectivo de compra = max(p[t], 0)
+    model.p_eff = pyo.Param(model.T, initialize={t: max(precios[t-1], 0.0) for t in T_set})
+
+    # --- Parámetros de batería ---
+    model.E_max    = pyo.Param(initialize=E_MAX)
+    model.P_ch_max = pyo.Param(initialize=P_CH_MAX)
+    model.P_dis_max= pyo.Param(initialize=P_DIS_MAX)
+    model.eta      = pyo.Param(initialize=ETA)
+    model.SOC_min  = pyo.Param(initialize=SOC_MIN)
+    model.SOC_max  = pyo.Param(initialize=SOC_MAX)
+    model.SOC_init = pyo.Param(initialize=SOC_INIT)
+    model.c_deg    = pyo.Param(initialize=C_DEG)
+
+    # --- Parámetros de mercado ---
     model.delta       = pyo.Param(initialize=DELTA)
     model.M           = pyo.Param(initialize=M_BIG)
     model.alpha_up    = pyo.Param(initialize=ALPHA_UP)
@@ -134,7 +141,7 @@ def construir_modelo(precios_compra, precios_venta=None):
     model.pi_act_up   = pyo.Param(initialize=PI_ACT_UP)
     model.pi_act_down = pyo.Param(initialize=PI_ACT_DOWN)
 
-    # Variables
+    # --- Variables ---
     model.x_sell = pyo.Var(model.T, domain=pyo.NonNegativeReals)
     model.x_buy  = pyo.Var(model.T, domain=pyo.NonNegativeReals)
     model.x_ch   = pyo.Var(model.T, domain=pyo.NonNegativeReals)
@@ -147,25 +154,34 @@ def construir_modelo(precios_compra, precios_venta=None):
     model.y_bat  = pyo.Var(model.T, domain=pyo.Binary)
     model.y_grid = pyo.Var(model.T, domain=pyo.Binary)
 
-    # Función objetivo
+    # --- Función objetivo ---
+    # Ingresos por venta en SPOT:         p[t]     * x_sell[t]
+    # Costes por compra en SPOT:          p_eff[t] * x_buy[t]
+    # Ingresos por disponibilidad aFRR:   pi_disp  * (r_up[t] + r_down[t])
+    # Ingresos netos por activación up:   (pi_act_up   - p[t])     * a_up[t]
+    # Ingresos netos por activación down: (pi_act_down - p_eff[t]) * a_down[t]
+    # Costes de degradación:              c_deg * (energía total operada)
     def obj_rule(m):
         return sum(
-            m.p_sell[t] * m.x_sell[t]
-            - m.p_buy_eff[t] * m.x_buy[t]
-            + m.pi_disp * (m.r_up[t] + m.r_down[t])
-            + (m.pi_act_up   - m.p_sell[t])    * m.a_up[t]
-            + (m.pi_act_down - m.p_buy_eff[t]) * m.a_down[t]
+            m.p[t]     * m.x_sell[t]
+            - m.p_eff[t] * m.x_buy[t]
+            + m.pi_disp  * (m.r_up[t] + m.r_down[t])
+            + (m.pi_act_up   - m.p[t])     * m.a_up[t]
+            + (m.pi_act_down - m.p_eff[t]) * m.a_down[t]
             - m.c_deg * (m.x_ch[t] + m.x_dis[t] + m.a_up[t] + m.a_down[t])
             for t in m.T
         )
     model.obj = pyo.Objective(rule=obj_rule, sense=pyo.maximize)
 
-    # Restricciones
+    # --- Restricciones ---
+
+    # Balance energético en cada intervalo
     def balance_rule(m, t):
         return (m.x_buy[t] + m.x_dis[t] + m.a_up[t]
                 == m.x_sell[t] + m.x_ch[t] + m.a_down[t])
     model.balance = pyo.Constraint(model.T, rule=balance_rule)
 
+    # Dinámica del SOC
     def soc_rule(m, t):
         soc_prev = m.SOC_init if t == 1 else m.SOC[t-1]
         return (m.SOC[t] == soc_prev
@@ -175,6 +191,7 @@ def construir_modelo(precios_compra, precios_venta=None):
     model.soc_min_c = pyo.Constraint(model.T, rule=lambda m, t: m.SOC[t] >= m.SOC_min)
     model.soc_max_c = pyo.Constraint(model.T, rule=lambda m, t: m.SOC[t] <= m.SOC_max)
 
+    # Límites de potencia de carga y descarga
     model.pmax_ch = pyo.Constraint(model.T,
         rule=lambda m, t: m.x_ch[t] + m.a_down[t]
                           <= m.y_bat[t] * m.P_ch_max * m.delta)
@@ -182,16 +199,19 @@ def construir_modelo(precios_compra, precios_venta=None):
         rule=lambda m, t: m.x_dis[t] + m.a_up[t]
                           <= (1 - m.y_bat[t]) * m.P_dis_max * m.delta)
 
+    # Reserva limitada por potencia máxima
     model.res_up_pow   = pyo.Constraint(model.T,
         rule=lambda m, t: m.x_dis[t] + m.r_up[t]   <= m.P_dis_max * m.delta)
     model.res_down_pow = pyo.Constraint(model.T,
         rule=lambda m, t: m.x_ch[t]  + m.r_down[t] <= m.P_ch_max  * m.delta)
 
+    # Activación limitada por reserva ofertada
     model.act_up_c   = pyo.Constraint(model.T,
         rule=lambda m, t: m.a_up[t]   == m.alpha_up   * m.r_up[t])
     model.act_down_c = pyo.Constraint(model.T,
         rule=lambda m, t: m.a_down[t] == m.alpha_down * m.r_down[t])
 
+    # Reserva limitada por SOC disponible
     def res_up_soc_rule(m, t):
         soc_prev = m.SOC_init if t == 1 else m.SOC[t-1]
         return m.r_up[t] <= m.eta * (soc_prev - m.SOC_min)
@@ -201,11 +221,13 @@ def construir_modelo(precios_compra, precios_venta=None):
     model.res_up_soc   = pyo.Constraint(model.T, rule=res_up_soc_rule)
     model.res_down_soc = pyo.Constraint(model.T, rule=res_down_soc_rule)
 
+    # No comprar y vender simultáneamente
     model.buy_c  = pyo.Constraint(model.T,
         rule=lambda m, t: m.x_buy[t]  <= m.y_grid[t]       * m.M)
     model.sell_c = pyo.Constraint(model.T,
         rule=lambda m, t: m.x_sell[t] <= (1 - m.y_grid[t]) * m.M)
 
+    # SOC final igual al inicial
     model.soc_final = pyo.Constraint(rule=lambda m: m.SOC[96] == m.SOC_init)
 
     return model
@@ -231,25 +253,24 @@ def extraer_resultados(model):
         data.append({
             "t":                        t,
             "hora":                     f"{(t-1)//4:02d}:{((t-1)%4)*15:02d}",
-            "p_sell [€/MWh]":           round(pyo.value(model.p_sell[t]), 2),
-            "p_buy [€/MWh]":            round(pyo.value(model.p_buy[t]), 2),
-            "p_buy_eff [€/MWh]":        round(pyo.value(model.p_buy_eff[t]), 2),
-            "x_sell [MWh]":             round(pyo.value(model.x_sell[t]), 4),
-            "x_buy [MWh]":              round(pyo.value(model.x_buy[t]), 4),
-            "x_ch [MWh]":               round(pyo.value(model.x_ch[t]), 4),
-            "x_dis [MWh]":              round(pyo.value(model.x_dis[t]), 4),
-            "r_up [MWh]":               round(pyo.value(model.r_up[t]), 4),
-            "r_down [MWh]":             round(pyo.value(model.r_down[t]), 4),
-            "a_up [MWh]":               round(pyo.value(model.a_up[t]), 4),
-            "a_down [MWh]":             round(pyo.value(model.a_down[t]), 4),
-            "SOC [MWh]":                round(pyo.value(model.SOC[t]), 4),
-            "y_bat":                    int(pyo.value(model.y_bat[t])),
-            "y_grid":                   int(pyo.value(model.y_grid[t])),
-            "p_disp [€/MWh]":           float(pyo.value(model.pi_disp)),
-            "p_act_up [€/MWh]":         float(pyo.value(model.pi_act_up)),
-            "p_act_down [€/MWh]":       float(pyo.value(model.pi_act_down)),
-            "capacidad_nominal [MWh]":  float(pyo.value(model.E_max)),
-            "soc_min_limit [MWh]":      float(pyo.value(model.SOC_min)),
+            "p [€/MWh]":               round(pyo.value(model.p[t]), 2),
+            "p_eff [€/MWh]":           round(pyo.value(model.p_eff[t]), 2),
+            "x_sell [MWh]":            round(pyo.value(model.x_sell[t]), 4),
+            "x_buy [MWh]":             round(pyo.value(model.x_buy[t]), 4),
+            "x_ch [MWh]":              round(pyo.value(model.x_ch[t]), 4),
+            "x_dis [MWh]":             round(pyo.value(model.x_dis[t]), 4),
+            "r_up [MWh]":              round(pyo.value(model.r_up[t]), 4),
+            "r_down [MWh]":            round(pyo.value(model.r_down[t]), 4),
+            "a_up [MWh]":              round(pyo.value(model.a_up[t]), 4),
+            "a_down [MWh]":            round(pyo.value(model.a_down[t]), 4),
+            "SOC [MWh]":               round(pyo.value(model.SOC[t]), 4),
+            "y_bat":                   int(pyo.value(model.y_bat[t])),
+            "y_grid":                  int(pyo.value(model.y_grid[t])),
+            "pi_disp [€/MWh]":         float(pyo.value(model.pi_disp)),
+            "pi_act_up [€/MWh]":       float(pyo.value(model.pi_act_up)),
+            "pi_act_down [€/MWh]":     float(pyo.value(model.pi_act_down)),
+            "E_max [MWh]":             float(pyo.value(model.E_max)),
+            "SOC_min [MWh]":           float(pyo.value(model.SOC_min)),
         })
     df = pd.DataFrame(data)
     beneficio_total = pyo.value(model.obj)
@@ -267,7 +288,6 @@ def extraer_resultados(model):
 
 if __name__ == "__main__":
 
-    # --- Pedir fecha interactivamente ---
     print("\n=== Optimización de Batería — Día Suelto ===")
     print("Introduce la fecha a optimizar.")
     print("(Los datos deben estar en el CSV mensual generado por parseo_omie.py)\n")
@@ -275,7 +295,6 @@ if __name__ == "__main__":
     while True:
         entrada = input("Fecha (DD/MM/YYYY o YYYY-MM-DD): ").strip()
         try:
-            # Aceptar ambos formatos
             if "/" in entrada:
                 fecha_dt  = pd.to_datetime(entrada, dayfirst=True)
             else:
@@ -285,7 +304,6 @@ if __name__ == "__main__":
         except Exception:
             print("  [!] Formato no reconocido. Prueba: 13/03/2026 o 2026-03-13")
 
-    # --- Cargar precios ---
     try:
         precios = cargar_precios(fecha_str)
     except (FileNotFoundError, ValueError) as e:
@@ -299,7 +317,6 @@ if __name__ == "__main__":
     print(f"  Precio medio: {precios.mean():.2f} €/MWh")
     print(f"  Optimizando...\n")
 
-    # --- Optimizar ---
     model   = construir_modelo(precios)
     results = resolver_modelo(model)
 
@@ -309,7 +326,6 @@ if __name__ == "__main__":
         print(f"[!] Solver terminó con estado: {status}")
         sys.exit()
 
-    # --- Extraer y guardar ---
     df, beneficio = extraer_resultados(model)
     df.insert(0, "fecha", fecha_str)
 
