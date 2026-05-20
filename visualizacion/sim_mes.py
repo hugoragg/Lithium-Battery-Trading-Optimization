@@ -8,8 +8,8 @@ Dashboard 3: Stress test con comparativa
 Dashboard 4: Tabla de metricas clave del mes
 
 Uso:
-    python visualizacion_simulacion_mensual.py              # interactivo
-    python visualizacion_simulacion_mensual.py 1 2026       # enero 2026
+    python -m visualizacion.sim_mes              # interactivo
+    python -m visualizacion.sim_mes 1 2026       # enero 2026
 """
 
 import sys
@@ -19,6 +19,9 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib.gridspec as gridspec
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 
 # =============================================================================
 # CONFIGURACION
@@ -37,7 +40,7 @@ else:
     MES  = int(input("Mes (numero 1-12): "))
     ANIO = int(input("Anio (ej. 2026): "))
 
-CARPETA     = Path(f"Resultados_Sim/{ANIO}-{MES:02d}")
+CARPETA     = ROOT / "resultados" / "simulacion" / f"{ANIO}-{MES:02d}"
 CSV_RESUMEN = CARPETA / f"resumen_sim_{ANIO}_{MES:02d}.csv"
 TITULO_MES  = f"{NOMBRES_MES[MES]} {ANIO}"
 
@@ -46,7 +49,7 @@ TITULO_MES  = f"{NOMBRES_MES[MES]} {ANIO}"
 # =============================================================================
 
 if not CSV_RESUMEN.exists():
-    print(f"[!] No se encuentra '{CSV_RESUMEN}'. Ejecuta primero simulador_mensual.py.")
+    print(f"[!] No se encuentra '{CSV_RESUMEN}'. Ejecuta primero `python -m simulacion.mes`.")
     sys.exit()
 
 res = pd.read_csv(CSV_RESUMEN)

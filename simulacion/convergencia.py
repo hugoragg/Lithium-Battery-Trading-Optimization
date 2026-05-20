@@ -6,8 +6,8 @@ Comprueba si N=200 simulaciones es suficiente ejecutando el mismo día
 con distintos valores de N y comprobando si P50 y VaR95 se estabilizan.
 
 Uso:
-    python convergencia_montecarlo.py              # interactivo
-    python convergencia_montecarlo.py 2026-01-01   # fecha directa
+    python -m simulacion.convergencia              # interactivo
+    python -m simulacion.convergencia 2026-01-01   # fecha directa
 """
 
 import sys
@@ -16,8 +16,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-from optimizacion_bateria import construir_modelo
-from simulador_ejecucion  import generar_escenario_ejecucion, simular_ejecucion
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from optimizacion.bateria import construir_modelo
+from simulacion.dia import generar_escenario_ejecucion, simular_ejecucion
 import pyomo.environ as pyo
 
 # =============================================================================
@@ -30,7 +33,7 @@ NOMBRES_MES = {
     9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
 }
 COLUMNAS_Q      = [f"H{h}Q{q}" for h in range(1, 25) for q in range(1, 5)]
-CARPETA_PRECIOS = Path("Precios")
+CARPETA_PRECIOS = ROOT / "datos" / "precios"
 
 # Valores de N a probar
 N_VALORES = [25, 50, 100, 150, 200, 300, 500]
@@ -261,7 +264,7 @@ else:
 print(f"  {'='*55}\n")
 
 # Guardar CSV de convergencia
-csv_out = Path("Resultados_Sim") / "dias_sueltos" / f"convergencia_{fecha_str}.csv"
+csv_out = ROOT / "resultados" / "simulacion" / "dias_sueltos" / f"convergencia_{fecha_str}.csv"
 csv_out.parent.mkdir(parents=True, exist_ok=True)
 df_conv.to_csv(csv_out, index=False)
 print(f"  CSV guardado: {csv_out}")

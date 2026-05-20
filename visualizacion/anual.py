@@ -21,6 +21,9 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
 # =============================================================================
 # CONFIGURACION
 # =============================================================================
@@ -31,8 +34,8 @@ NOMBRES_MES = {
     9: "Septiembre", 10: "Octubre", 11: "Noviembre",  12: "Diciembre"
 }
 
-CARPETA_RES = Path("Resultados")
-CARPETA_SIM = Path("Resultados_Sim")
+CARPETA_RES = ROOT / "resultados" / "optimizacion"
+CARPETA_SIM = ROOT / "resultados" / "simulacion"
 
 CF, CS, CB, CCH, CDI, CSOC, CP = "#F5A623", "#27AE60", "#E74C3C", "#3498DB", "#9B59B6", "#1ABC9C", "#E67E22"
 CRU, CRD, CAU, CAD, CACC, BG, PBG = "#E74C3C", "#3498DB", "#C0392B", "#2980B9", "#2C3E50", "#F5F6FA", "#FFFFFF"

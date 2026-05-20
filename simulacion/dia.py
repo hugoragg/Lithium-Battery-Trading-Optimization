@@ -28,33 +28,25 @@ Casos extremos:
   · Escenarios extremos   (P95/P99 — amplificador ×3)
 """
 
+import sys
 import numpy as np
 import pandas as pd
 import pyomo.environ as pyo
+from pathlib import Path
 import warnings
 warnings.filterwarnings("ignore")
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 
 # =============================================================================
 # PARÁMETROS DEL SISTEMA
 # =============================================================================
 
-E_MAX     = 2.0
-P_CH_MAX  = 1.0
-P_DIS_MAX = 1.0
-ETA       = 0.90
-DOD       = 0.93
-SOC_MIN   = E_MAX * (1 - DOD)
-SOC_MAX   = E_MAX
-SOC_INIT  = E_MAX * 0.5
-C_DEG     = 2.0
-DELTA     = 0.25
-M_BIG     = 100.0
-
-PI_DISP_BASE     = 10.0
-PI_ACT_UP_BASE   = 114.30
-PI_ACT_DOWN_BASE = 50.73
-ALPHA_UP_BASE    = 0.2357
-ALPHA_DOWN_BASE  = 0.2225
+from parametros import (
+    E_MAX, SOC_MIN, SOC_MAX, SOC_INIT, ETA, C_DEG,
+    PI_DISP_UP, PI_DISP_DOWN, PI_ACT_UP, PI_ACT_DOWN,
+)
 
 
 # =============================================================================
@@ -66,7 +58,7 @@ def obtener_schedule(precios_previstos: np.ndarray, solver: str = "highs") -> di
     Ejecuta el modelo de optimización UNA SOLA VEZ con los precios previstos
     y devuelve el schedule comprometido para el día siguiente.
     """
-    from optimizacion_bateria import construir_modelo
+    from optimizacion.bateria import construir_modelo
 
     print("  Optimizando schedule con precios previstos...")
     model = construir_modelo(precios_previstos)
@@ -127,10 +119,11 @@ def generar_escenario_ejecucion(
     factor         = np.exp(sigma_spot * amp * epsilon)
     precios_reales = np.sign(precios_prev) * np.abs(precios_prev) * factor
 
-    # 2. Precios de reserva reales — lognormal escalar
-    pi_disp_real     = PI_DISP_BASE     * np.exp(sigma_pi_disp * amp * rng.standard_normal())
-    pi_act_up_real   = PI_ACT_UP_BASE   * np.exp(sigma_pi_act  * amp * rng.standard_normal())
-    pi_act_down_real = PI_ACT_DOWN_BASE * np.exp(sigma_pi_act  * amp * rng.standard_normal())
+    # 2. Precios de reserva reales — lognormal escalar (ruido independiente up/down)
+    pi_disp_up_real   = PI_DISP_UP   * np.exp(sigma_pi_disp * amp * rng.standard_normal())
+    pi_disp_down_real = PI_DISP_DOWN * np.exp(sigma_pi_disp * amp * rng.standard_normal())
+    pi_act_up_real    = PI_ACT_UP    * np.exp(sigma_pi_act  * amp * rng.standard_normal())
+    pi_act_down_real  = PI_ACT_DOWN  * np.exp(sigma_pi_act  * amp * rng.standard_normal())
 
     # 3. Pujas perdidas — Bernoulli por intervalo
     p_adj        = min(p_no_puja * amp, 0.95)
@@ -148,17 +141,18 @@ def generar_escenario_ejecucion(
     fallo_tecnico = rng.random(T) < p_fallo_adj
 
     return {
-        "precios_reales":    precios_reales,
-        "pi_disp_real":      pi_disp_real,
-        "pi_act_up_real":    pi_act_up_real,
-        "pi_act_down_real":  pi_act_down_real,
-        "no_gana_puja":      no_gana_puja,
-        "a_up_real":         a_up_real,
-        "a_down_real":       a_down_real,
-        "fallo_tecnico":     fallo_tecnico,
-        "factor_act_up":     factor_act_up,
-        "factor_act_down":   factor_act_down,
-        "extremo":           extremo,
+        "precios_reales":     precios_reales,
+        "pi_disp_up_real":    pi_disp_up_real,
+        "pi_disp_down_real":  pi_disp_down_real,
+        "pi_act_up_real":     pi_act_up_real,
+        "pi_act_down_real":   pi_act_down_real,
+        "no_gana_puja":       no_gana_puja,
+        "a_up_real":          a_up_real,
+        "a_down_real":        a_down_real,
+        "fallo_tecnico":      fallo_tecnico,
+        "factor_act_up":      factor_act_up,
+        "factor_act_down":    factor_act_down,
+        "extremo":            extremo,
     }
 
 
@@ -198,9 +192,10 @@ def simular_ejecucion(schedule: dict, escenario: dict) -> dict:
     fallo       = escenario["fallo_tecnico"]
     a_up_r      = escenario["a_up_real"]
     a_down_r    = escenario["a_down_real"]
-    pi_disp     = escenario["pi_disp_real"]
-    pi_act_up   = escenario["pi_act_up_real"]
-    pi_act_down = escenario["pi_act_down_real"]
+    pi_disp_up   = escenario["pi_disp_up_real"]
+    pi_disp_down = escenario["pi_disp_down_real"]
+    pi_act_up    = escenario["pi_act_up_real"]
+    pi_act_down  = escenario["pi_act_down_real"]
 
     # Precio medio del día real — referencia dinámica para penalización SOC
     precio_medio_dia = float(np.mean(np.maximum(p_reales, 0.0)))
@@ -265,7 +260,7 @@ def simular_ejecucion(schedule: dict, escenario: dict) -> dict:
 
         # ------ Beneficio del intervalo ------
         ing_spot_t = p_real * x_sell_plan - p_eff * x_buy_plan
-        ing_disp_t = pi_disp * (r_up_plan + r_down_plan)
+        ing_disp_t = pi_disp_up * r_up_plan + pi_disp_down * r_down_plan
         ing_act_t  = ((pi_act_up   - p_real) * a_up_t
                     + (pi_act_down - p_eff)  * a_down_t)
         deg_t      = C_DEG * (x_ch_real + x_dis_real + a_up_t + a_down_t)
@@ -303,9 +298,10 @@ def simular_ejecucion(schedule: dict, escenario: dict) -> dict:
         "energia_no_operada [MWh]": round(energia_no_operada, 4),
         "energia_recortada [MWh]":  round(energia_recortada, 4),
         "intervalos_soc_critico":   intervalos_soc_critico,
-        "pi_disp_real [€/MWh]":     round(escenario["pi_disp_real"], 4),
-        "pi_act_up_real [€/MWh]":   round(escenario["pi_act_up_real"], 4),
-        "pi_act_down_real [€/MWh]": round(escenario["pi_act_down_real"], 4),
+        "pi_disp_up_real [€/MWh]":   round(escenario["pi_disp_up_real"], 4),
+        "pi_disp_down_real [€/MWh]": round(escenario["pi_disp_down_real"], 4),
+        "pi_act_up_real [€/MWh]":    round(escenario["pi_act_up_real"], 4),
+        "pi_act_down_real [€/MWh]":  round(escenario["pi_act_down_real"], 4),
         "factor_act_up":            round(escenario["factor_act_up"], 4),
         "factor_act_down":          round(escenario["factor_act_down"], 4),
         "n_pujas_perdidas":         int(escenario["no_gana_puja"].sum()),
@@ -441,10 +437,10 @@ if __name__ == "__main__":
             print("  [!] Formato no reconocido.")
 
     mes, anio = fecha_dt.month, fecha_dt.year
-    csv_path  = Path("Precios") / f"precios_{NOMBRES_MES[mes].lower()}_{anio}.csv"
+    csv_path  = ROOT / "datos" / "precios" / f"precios_{NOMBRES_MES[mes].lower()}_{anio}.csv"
 
     if not csv_path.exists():
-        print(f"[!] No se encuentra '{csv_path}'. Ejecuta primero parseo_omie.py.")
+        print(f"[!] No se encuentra '{csv_path}'. Ejecuta primero parseo.omie.")
         sys.exit()
 
     df_p = pd.read_csv(csv_path)
@@ -465,7 +461,7 @@ if __name__ == "__main__":
         seed              = 42,
     )
 
-    carpeta = Path("Resultados_Sim") / "dias_sueltos"
+    carpeta = ROOT / "resultados" / "simulacion" / "dias_sueltos"
     carpeta.mkdir(parents=True, exist_ok=True)
     df_normal.to_csv(carpeta  / f"sim_normal_{fecha_str}.csv",  index=False)
     df_extremo.to_csv(carpeta / f"sim_extremo_{fecha_str}.csv", index=False)

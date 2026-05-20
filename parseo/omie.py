@@ -5,17 +5,20 @@ Autor: Hugo Raggini Paternain
 Lee todos los Excel OMIE de una carpeta con formato:
     INT_PBC_EV_H_1_DD_MM_YYYY_DD_MM_YYYY.xls
 Extrae la fila "Precio marginal en el sistema español (EUR/MWh)"
-y genera un CSV maestro en: Precios/precios_<mes>_<año>.csv
+y genera un CSV maestro en: datos/precios/precios_<mes>_<año>.csv
 
 Uso:
-    python parseo_omie.py              # pide mes y año interactivamente
-    python parseo_omie.py 1 2026       # enero 2026
-    python parseo_omie.py 6 2026       # junio 2026
+    python -m parseo.omie              # pide mes y año interactivamente
+    python -m parseo.omie 1 2026       # enero 2026
+    python -m parseo.omie 6 2026       # junio 2026
 """
 
 import sys
 import pandas as pd
 from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 
 # =============================================================================
 # CONFIGURACIÓN
@@ -29,7 +32,7 @@ NOMBRES_MES = {
 
 FILA_OBJETIVO  = "Precio marginal en el sistema español (EUR/MWh)"
 COLUMNAS_Q     = [f"H{h}Q{q}" for h in range(1, 25) for q in range(1, 5)]
-CARPETA_PRECIOS = Path("Precios")   # ← carpeta de salida
+CARPETA_PRECIOS = ROOT / "datos" / "precios"
 
 # --- Mes y año: por argumento o interactivo ---
 if len(sys.argv) == 3:
@@ -39,7 +42,7 @@ else:
     MES  = int(input("Mes (número 1-12): "))
     ANIO = int(input("Año (ej. 2026): "))
 
-CARPETA_DATOS = f"Datos/{NOMBRES_MES[MES]} {ANIO}"
+CARPETA_DATOS = ROOT / "datos" / "omie_xls" / f"{NOMBRES_MES[MES]} {ANIO}"
 CSV_SALIDA    = CARPETA_PRECIOS / f"precios_{NOMBRES_MES[MES].lower()}_{ANIO}.csv"
 
 # =============================================================================

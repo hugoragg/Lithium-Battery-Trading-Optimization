@@ -2,12 +2,12 @@
 Visualización de Simulación — Día Suelto
 Autor: Hugo Raggini Paternain
 
-Lee los CSVs de simulación generados por simulador_ejecucion.py
+Lee los CSVs de simulación generados por `python -m simulacion.dia`
 y los compara con el beneficio previsto del modelo.
 
 Uso:
-    python visualizacion_simulacion_dia.py              # interactivo
-    python visualizacion_simulacion_dia.py 2026-01-01   # fecha directa
+    python -m visualizacion.sim_dia              # interactivo
+    python -m visualizacion.sim_dia 2026-01-01   # fecha directa
 """
 
 import sys
@@ -16,16 +16,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
 # =============================================================================
 # CONFIGURACIÓN
 # =============================================================================
 
-CARPETA_SIM = Path("Resultados_Sim") / "dias_sueltos"
-CARPETA_DET = Path("Resultados Días Sueltos")
+CARPETA_SIM = ROOT / "resultados" / "simulacion" / "dias_sueltos"
+CARPETA_DET = ROOT / "resultados" / "dias_sueltos"
 
-SOC_INIT = 1.0
-E_MAX    = 2.0
-SOC_MIN  = E_MAX * (1 - 0.93)
+from parametros import SOC_INIT, E_MAX, SOC_MIN
 
 # --- Fecha ---
 if len(sys.argv) == 2:
@@ -50,13 +51,13 @@ csv_extremo = CARPETA_SIM / f"sim_extremo_{fecha_str}.csv"
 
 for f in [csv_normal, csv_extremo]:
     if not f.exists():
-        print(f"[!] No se encuentra '{f}'. Ejecuta primero simulador_ejecucion.py.")
+        print(f"[!] No se encuentra '{f}'. Ejecuta primero `python -m simulacion.dia`.")
         sys.exit()
 
 df_n = pd.read_csv(csv_normal)
 df_e = pd.read_csv(csv_extremo)
 
-# SOC previsto — desde Resultados Días Sueltos si existe
+# SOC previsto — desde resultados/dias_sueltos si existe
 csv_det = CARPETA_DET / f"resultado_{fecha_str}.csv"
 df_det  = pd.read_csv(csv_det) if csv_det.exists() else None
 
@@ -253,13 +254,13 @@ categorias = ["Spot", "Disponib.", "Activación", "Degradación", "Penal. SOC"]
 # Previsto — desde el schedule (columnas de simulación tienen beneficio_previsto
 # pero no el desglose, así que lo calculamos desde df_det si existe)
 if df_det is not None:
-    PI_DISP, PI_ACT_UP, PI_ACT_DOWN, C_DEG_V = 10.0, 114.30, 50.73, 2.0
+    from parametros import PI_DISP_UP, PI_DISP_DOWN, C_DEG
     ing_spot_prev = (df_det["p_sell [€/MWh]"] * df_det["x_sell [MWh]"]
                    - df_det["p_buy_eff [€/MWh]"] * df_det["x_buy [MWh]"]).sum()
-    ing_disp_prev = (PI_DISP * (df_det["r_up [MWh]"] + df_det["r_down [MWh]"])).sum()
+    ing_disp_prev = (PI_DISP_UP * df_det["r_up [MWh]"] + PI_DISP_DOWN * df_det["r_down [MWh]"]).sum()
     ing_act_prev  = ((df_det["p_act_up [€/MWh]"]   - df_det["p_sell [€/MWh]"])   * df_det["a_up [MWh]"]
                    + (df_det["p_act_down [€/MWh]"] - df_det["p_buy_eff [€/MWh]"]) * df_det["a_down [MWh]"]).sum()
-    deg_prev      = (C_DEG_V * (df_det["x_ch [MWh]"] + df_det["x_dis [MWh]"]
+    deg_prev      = (C_DEG * (df_det["x_ch [MWh]"] + df_det["x_dis [MWh]"]
                               + df_det["a_up [MWh]"] + df_det["a_down [MWh]"])).sum()
     vals_prev = [ing_spot_prev, ing_disp_prev, ing_act_prev, -deg_prev, 0]
     tiene_prev = True

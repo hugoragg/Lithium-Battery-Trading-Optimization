@@ -2,12 +2,12 @@
 Visualización de Resultados — Día Suelto
 Autor: Hugo Raggini Paternain
 
-Lee el CSV de 'Resultados Días Sueltos/' generado por optimizacion_bateria.py
+Lee el CSV de 'resultados/dias_sueltos/' generado por optimizacion.bateria
 y genera los dashboards de operación física y resultados económicos.
 
 Uso:
-    python visualizacion_resultados.py              # pregunta fecha interactivamente
-    python visualizacion_resultados.py 2026-03-13   # fecha directa
+    python -m visualizacion.dia              # pregunta fecha interactivamente
+    python -m visualizacion.dia 2026-03-13   # fecha directa
 """
 
 import pandas as pd
@@ -17,11 +17,14 @@ import numpy as np
 import sys
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
 # =============================================================================
 # 1. CARGA DE DATOS
 # =============================================================================
 
-CARPETA = Path("Resultados Días Sueltos")
+CARPETA = ROOT / "resultados" / "dias_sueltos"
 
 # --- Determinar fecha ---
 if len(sys.argv) == 2:
@@ -54,7 +57,7 @@ if not csv_path.exists():
         for d in disponibles:
             print(f"      · {d}")
     else:
-        print(f"    No hay resultados en '{CARPETA}'. Ejecuta primero optimizacion_bateria.py.")
+        print(f"    No hay resultados en '{CARPETA}'. Ejecuta primero optimizacion.bateria.")
     sys.exit()
 
 df = pd.read_csv(csv_path)

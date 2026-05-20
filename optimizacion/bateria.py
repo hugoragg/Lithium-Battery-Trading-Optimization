@@ -3,10 +3,10 @@ Optimización Cuartohoraria de Batería — Arbitraje + Mercado Secundario (aFRR
 Autor: Hugo Raggini Paternain
 
 Modelo de optimización con Pyomo para maximizar beneficios en el mercado eléctrico.
-Lee precios reales del CSV mensual generado por parseo_omie.py.
+Lee precios reales del CSV mensual generado por parseo.omie.
 
 Uso:
-    python optimizacion_bateria.py    # pregunta fecha interactivamente
+    python -m optimizacion.bateria    # pregunta fecha interactivamente
 """
 
 import pyomo.environ as pyo
@@ -15,31 +15,14 @@ import numpy as np
 import sys
 from pathlib import Path
 
-# =============================================================================
-# PARÁMETROS DEL SISTEMA
-# =============================================================================
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 
-# --- Batería ---
-E_MAX     = 2.0
-P_CH_MAX  = 1.0
-P_DIS_MAX = 1.0
-ETA       = 0.90
-DOD       = 0.93
-SOC_MIN   = E_MAX * (1 - DOD)
-SOC_MAX   = E_MAX
-SOC_INIT  = E_MAX * 0.5
-C_DEG     = 2.0
-
-# --- Mercado ---
-DELTA = 0.25
-M_BIG = 100.0
-
-# --- Reserva secundaria (aFRR / REE) ---
-ALPHA_UP    = 0.2357
-ALPHA_DOWN  = 0.2225
-PI_DISP     = 10.0
-PI_ACT_UP   = 114.30
-PI_ACT_DOWN = 50.73
+from parametros import (
+    E_MAX, P_CH_MAX, P_DIS_MAX, ETA, DOD, SOC_MIN, SOC_MAX, SOC_INIT, C_DEG,
+    DELTA, M_BIG,
+    ALPHA_UP, ALPHA_DOWN, PI_DISP_UP, PI_DISP_DOWN, PI_ACT_UP, PI_ACT_DOWN,
+)
 
 # --- Configuración de carpetas ---
 NOMBRES_MES = {
@@ -48,8 +31,8 @@ NOMBRES_MES = {
     9: "Septiembre", 10: "Octubre", 11: "Noviembre",  12: "Diciembre"
 }
 COLUMNAS_Q     = [f"H{h}Q{q}" for h in range(1, 25) for q in range(1, 5)]
-CARPETA_SALIDA  = Path("Resultados Días Sueltos")
-CARPETA_PRECIOS = Path("Precios")
+CARPETA_SALIDA  = ROOT / "resultados" / "dias_sueltos"
+CARPETA_PRECIOS = ROOT / "datos" / "precios"
 
 
 # =============================================================================
@@ -69,7 +52,7 @@ def cargar_precios(fecha_str: str) -> np.ndarray:
 
     if not csv.exists():
         raise FileNotFoundError(
-            f"No se encuentra '{csv}'. Ejecuta primero: python parseo_omie.py {mes} {anio}"
+            f"No se encuentra '{csv}'. Ejecuta primero: python -m parseo.omie {mes} {anio}"
         )
 
     df = pd.read_csv(csv)
@@ -137,7 +120,8 @@ def construir_modelo(precios: np.ndarray):
     model.M           = pyo.Param(initialize=M_BIG)
     model.alpha_up    = pyo.Param(initialize=ALPHA_UP)
     model.alpha_down  = pyo.Param(initialize=ALPHA_DOWN)
-    model.pi_disp     = pyo.Param(initialize=PI_DISP)
+    model.pi_disp_up   = pyo.Param(initialize=PI_DISP_UP)
+    model.pi_disp_down = pyo.Param(initialize=PI_DISP_DOWN)
     model.pi_act_up   = pyo.Param(initialize=PI_ACT_UP)
     model.pi_act_down = pyo.Param(initialize=PI_ACT_DOWN)
 
@@ -155,17 +139,19 @@ def construir_modelo(precios: np.ndarray):
     model.y_grid = pyo.Var(model.T, domain=pyo.Binary)
 
     # --- Función objetivo ---
-    # Ingresos por venta en SPOT:         p[t]     * x_sell[t]
-    # Costes por compra en SPOT:          p_eff[t] * x_buy[t]
-    # Ingresos por disponibilidad aFRR:   pi_disp  * (r_up[t] + r_down[t])
-    # Ingresos netos por activación up:   (pi_act_up   - p[t])     * a_up[t]
-    # Ingresos netos por activación down: (pi_act_down - p_eff[t]) * a_down[t]
-    # Costes de degradación:              c_deg * (energía total operada)
+    # Ingresos por venta en SPOT:           p[t]     * x_sell[t]
+    # Costes por compra en SPOT:            p_eff[t] * x_buy[t]
+    # Ingresos disponibilidad aFRR up:      pi_disp_up   * r_up[t]
+    # Ingresos disponibilidad aFRR down:    pi_disp_down * r_down[t]
+    # Ingresos netos por activación up:     (pi_act_up   - p[t])     * a_up[t]
+    # Ingresos netos por activación down:   (pi_act_down sk- p_eff[t]) * a_down[t]
+    # Costes de degradación:                c_deg * (energía total operada)
     def obj_rule(m):
         return sum(
             m.p[t]     * m.x_sell[t]
             - m.p_eff[t] * m.x_buy[t]
-            + m.pi_disp  * (m.r_up[t] + m.r_down[t])
+            + m.pi_disp_up   * m.r_up[t]
+            + m.pi_disp_down * m.r_down[t]
             + (m.pi_act_up   - m.p[t])     * m.a_up[t]
             + (m.pi_act_down - m.p_eff[t]) * m.a_down[t]
             - m.c_deg * (m.x_ch[t] + m.x_dis[t] + m.a_up[t] + m.a_down[t])
@@ -266,7 +252,8 @@ def extraer_resultados(model):
             "SOC [MWh]":               round(pyo.value(model.SOC[t]), 4),
             "y_bat":                   int(pyo.value(model.y_bat[t])),
             "y_grid":                  int(pyo.value(model.y_grid[t])),
-            "pi_disp [€/MWh]":         float(pyo.value(model.pi_disp)),
+            "pi_disp_up [€/MWh]":      float(pyo.value(model.pi_disp_up)),
+            "pi_disp_down [€/MWh]":    float(pyo.value(model.pi_disp_down)),
             "pi_act_up [€/MWh]":       float(pyo.value(model.pi_act_up)),
             "pi_act_down [€/MWh]":     float(pyo.value(model.pi_act_down)),
             "E_max [MWh]":             float(pyo.value(model.E_max)),
@@ -290,7 +277,7 @@ if __name__ == "__main__":
 
     print("\n=== Optimización de Batería — Día Suelto ===")
     print("Introduce la fecha a optimizar.")
-    print("(Los datos deben estar en el CSV mensual generado por parseo_omie.py)\n")
+    print("(Los datos deben estar en el CSV mensual generado por parseo.omie)\n")
 
     while True:
         entrada = input("Fecha (DD/MM/YYYY o YYYY-MM-DD): ").strip()
@@ -334,4 +321,4 @@ if __name__ == "__main__":
     df.to_csv(csv_salida, index=False)
 
     print(f"  CSV guardado: {csv_salida}")
-    print(f"  Listo. Puedes visualizar con: python visualizacion_resultados.py {fecha_str}\n")
+    print(f"  Listo. Puedes visualizar con: python -m visualizacion.dia {fecha_str}\n")

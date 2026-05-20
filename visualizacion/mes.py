@@ -3,8 +3,8 @@ Visualización Mensual de Resultados — Dashboard estilo diario
 Autor: Hugo Raggini Paternain
 
 Uso:
-    python visualizacion_mensual.py              # interactivo
-    python visualizacion_mensual.py 1 2026       # enero 2026
+    python -m visualizacion.mes              # interactivo
+    python -m visualizacion.mes 1 2026       # enero 2026
 """
 
 import sys
@@ -14,7 +14,8 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from pathlib import Path
 
-#visualizacion_mensual.py
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 
 # =============================================================================
 # CONFIGURACIÓN
@@ -33,7 +34,7 @@ else:
     MES  = int(input("Mes (número 1-12): "))
     ANIO = int(input("Año (ej. 2026): "))
 
-CARPETA     = Path(f"Resultados/{ANIO}-{MES:02d}")
+CARPETA     = ROOT / "resultados" / "optimizacion" / f"{ANIO}-{MES:02d}"
 CSV_RESUMEN = CARPETA / f"resumen_{ANIO}_{MES:02d}.csv"
 TITULO_MES  = f"{NOMBRES_MES[MES]} {ANIO}"
 
@@ -42,7 +43,7 @@ TITULO_MES  = f"{NOMBRES_MES[MES]} {ANIO}"
 # =============================================================================
 
 if not CSV_RESUMEN.exists():
-    print(f"[!] No se encuentra '{CSV_RESUMEN}'. Ejecuta primero optimizacion_mensual.py.")
+    print(f"[!] No se encuentra '{CSV_RESUMEN}'. Ejecuta primero `python -m optimizacion.mes`.")
     sys.exit()
 
 resumen = pd.read_csv(CSV_RESUMEN)
@@ -148,15 +149,12 @@ if not detalle.empty and all(c in detalle.columns for c in [
         "r_up [MWh]", "r_down [MWh]",
         "a_up [MWh]", "a_down [MWh]"]):
 
-    PI_DISP     = 10.0
-    PI_ACT_UP   = 114.30
-    PI_ACT_DOWN = 50.73
-    C_DEG       = 2.0
+    from parametros import PI_DISP_UP, PI_DISP_DOWN, PI_ACT_UP, PI_ACT_DOWN, C_DEG
 
     # Ingresos por intervalo
     detalle["ing_arbitraje"]  = (detalle["p_sell [€/MWh]"]    * detalle["x_sell [MWh]"]
                                 - detalle["p_buy_eff [€/MWh]"] * detalle["x_buy [MWh]"])
-    detalle["ing_disp"]       = PI_DISP * (detalle["r_up [MWh]"] + detalle["r_down [MWh]"])
+    detalle["ing_disp"]       = PI_DISP_UP * detalle["r_up [MWh]"] + PI_DISP_DOWN * detalle["r_down [MWh]"]
     detalle["ing_activacion"] = ((PI_ACT_UP   - detalle["p_sell [€/MWh]"]) * detalle["a_up [MWh]"]
                                 + (PI_ACT_DOWN - detalle["p_buy_eff [€/MWh]"]) * detalle["a_down [MWh]"])
     detalle["cst_deg"]        = C_DEG * (detalle["x_ch [MWh]"] + detalle["x_dis [MWh]"]

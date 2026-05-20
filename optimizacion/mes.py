@@ -2,13 +2,13 @@
 Optimización Mensual de Batería — Loop Diario
 Autor: Hugo Raggini Paternain
 
-Lee el CSV de precios mensuales generado por parseo_omie.py,
+Lee el CSV de precios mensuales generado por parseo.omie,
 corre la optimización diaria para cada día y guarda un CSV
-de resultados por día en: Resultados/YYYY-MM/
+de resultados por día en: resultados/optimizacion/YYYY-MM/
 
 Uso:
-    python optimizacion_mensual.py              # interactivo
-    python optimizacion_mensual.py 1 2026       # enero 2026
+    python -m optimizacion.mes              # interactivo
+    python -m optimizacion.mes 1 2026       # enero 2026
 """
 
 import sys
@@ -17,7 +17,10 @@ import numpy as np
 from pathlib import Path
 import pyomo.environ as pyo
 
-from optimizacion_bateria import construir_modelo, extraer_resultados
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from optimizacion.bateria import construir_modelo, extraer_resultados
 
 # =============================================================================
 # CONFIGURACIÓN
@@ -30,7 +33,7 @@ NOMBRES_MES = {
 }
 
 COLUMNAS_Q      = [f"H{h}Q{q}" for h in range(1, 25) for q in range(1, 5)]
-CARPETA_PRECIOS = Path("Precios")   # ← ruta actualizada
+CARPETA_PRECIOS = ROOT / "datos" / "precios"
 
 SOLVER = "highs"
 SOLVER_OPTIONS = {
@@ -50,7 +53,7 @@ else:
     ANIO = int(input("Año (ej. 2026): "))
 
 CSV_PRECIOS    = CARPETA_PRECIOS / f"precios_{NOMBRES_MES[MES].lower()}_{ANIO}.csv"
-CARPETA_SALIDA = Path(f"Resultados/{ANIO}-{MES:02d}")
+CARPETA_SALIDA = ROOT / "resultados" / "optimizacion" / f"{ANIO}-{MES:02d}"
 
 # =============================================================================
 # MAIN
@@ -61,7 +64,7 @@ if __name__ == "__main__":
     # --- Cargar precios ---
     if not CSV_PRECIOS.exists():
         print(f"[!] No se encuentra '{CSV_PRECIOS}'.")
-        print(f"    Ejecuta primero: python parseo_omie.py {MES} {ANIO}")
+        print(f"    Ejecuta primero: python -m parseo.omie {MES} {ANIO}")
         sys.exit()
 
     df_precios = pd.read_csv(CSV_PRECIOS)

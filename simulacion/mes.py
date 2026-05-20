@@ -3,25 +3,25 @@ Simulador Mensual de Ejecución Real — Batería Pura (Arbitraje + aFRR)
 Autor: Hugo Raggini Paternain
 ----------------------------------------------------------------------
 Integración con el ecosistema existente:
-    parseo_omie.py          → Precios/precios_{mes}_{año}.csv
-    optimizacion_bateria.py → construir_modelo()
-    simulador_ejecucion.py  → generar_escenario_ejecucion(), simular_ejecucion()
+    parseo.omie         → datos/precios/precios_{mes}_{año}.csv
+    optimizacion.bateria → construir_modelo()
+    simulacion.dia       → generar_escenario_ejecucion(), simular_ejecucion()
 
 Flujo:
     Para cada día del mes:
-        1. Carga precios reales del CSV mensual (Precios/)
+        1. Carga precios reales del CSV mensual (datos/precios/)
         2. Optimiza el schedule con esos precios
         3. Simula N escenarios de ejecución real con aleatoriedad
         4. Guarda CSV diario + acumula resumen mensual
 
 Outputs:
-    Resultados_Sim/{YYYY-MM}/simulacion_{fecha}.csv
-    Resultados_Sim/{YYYY-MM}/resumen_sim_{YYYY}_{MM}.csv
+    resultados/simulacion/{YYYY-MM}/simulacion_{fecha}.csv
+    resultados/simulacion/{YYYY-MM}/resumen_sim_{YYYY}_{MM}.csv
 
 Uso:
-    python simulador_mensual.py              # interactivo
-    python simulador_mensual.py 1 2026       # enero 2026
-    python simulador_mensual.py 3 2026 200   # marzo 2026, 200 sim. normales
+    python -m simulacion.mes              # interactivo
+    python -m simulacion.mes 1 2026       # enero 2026
+    python -m simulacion.mes 3 2026 200   # marzo 2026, 200 sim. normales
 """
 
 import sys
@@ -32,8 +32,11 @@ from pathlib import Path
 import warnings
 warnings.filterwarnings("ignore")
 
-from optimizacion_bateria import construir_modelo
-from simulador_ejecucion import (
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from optimizacion.bateria import construir_modelo
+from simulacion.dia import (
     generar_escenario_ejecucion,
     simular_ejecucion,
 )
@@ -49,7 +52,7 @@ NOMBRES_MES = {
 }
 
 COLUMNAS_Q      = [f"H{h}Q{q}" for h in range(1, 25) for q in range(1, 5)]
-CARPETA_PRECIOS = Path("Precios")
+CARPETA_PRECIOS = ROOT / "datos" / "precios"
 
 SOLVER = "highs"
 SOLVER_OPTIONS = {
@@ -84,7 +87,7 @@ N_NORMAL  = int(sys.argv[3]) if len(sys.argv) >= 4 else 200
 N_EXTREMO = max(N_NORMAL // 5, 20)
 
 CSV_PRECIOS    = CARPETA_PRECIOS / f"precios_{NOMBRES_MES[MES].lower()}_{ANIO}.csv"
-CARPETA_SALIDA = Path(f"Resultados_Sim/{ANIO}-{MES:02d}")
+CARPETA_SALIDA = ROOT / "resultados" / "simulacion" / f"{ANIO}-{MES:02d}"
 SEED_BASE      = 42
 
 
@@ -217,7 +220,7 @@ if __name__ == "__main__":
 
     if not CSV_PRECIOS.exists():
         print(f"[!] No se encuentra '{CSV_PRECIOS}'.")
-        print(f"    Ejecuta primero: python parseo_omie.py {MES} {ANIO}")
+        print(f"    Ejecuta primero: python -m parseo.omie {MES} {ANIO}")
         sys.exit()
 
     df_precios = pd.read_csv(CSV_PRECIOS)
