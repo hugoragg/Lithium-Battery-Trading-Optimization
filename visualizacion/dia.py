@@ -85,18 +85,23 @@ cols_fisicas = ["x_sell [MWh]", "x_buy [MWh]", "x_ch [MWh]", "x_dis [MWh]",
                 "r_up [MWh]", "r_down [MWh]", "a_up [MWh]", "a_down [MWh]"]
 df[cols_fisicas] = df[cols_fisicas].clip(lower=0)
 
+from parametros import C_DEG
+
 ing_venta  = df["p [€/MWh]"]     * df["x_sell [MWh]"]
 cst_compra = df["p_eff [€/MWh]"] * df["x_buy [MWh]"]
 ing_disp   = (df["pi_disp_up [€/MWh]"]   * df["r_up [MWh]"]
             + df["pi_disp_down [€/MWh]"] * df["r_down [MWh]"])
 ing_act    = ((df["pi_act_up [€/MWh]"]   - df["p [€/MWh]"])     * df["a_up [MWh]"]) \
            + ((df["pi_act_down [€/MWh]"] - df["p_eff [€/MWh]"]) * df["a_down [MWh]"])
+cst_deg    = C_DEG * (df["x_ch [MWh]"] + df["x_dis [MWh]"]
+                    + df["a_up [MWh]"] + df["a_down [MWh]"])
 
-df["ben_neto"] = ing_venta - cst_compra + ing_disp + ing_act
+df["ben_neto"] = ing_venta - cst_compra + ing_disp + ing_act - cst_deg
 df["ben_acum"] = df["ben_neto"].cumsum()
 
 TV, TC = ing_venta.sum(), cst_compra.sum()
 TR, TA = ing_disp.sum(), ing_act.sum()
+TD     = cst_deg.sum()
 TB     = df["ben_neto"].sum()
 
 x      = np.arange(len(df))
@@ -181,10 +186,11 @@ gs = gridspec.GridSpec(3, 2, figure=fig2,
 ax_kpi = fig2.add_subplot(gs[0, :])
 ax_kpi.axis("off")
 kpis = [
-    ("BENEFICIO NETO",  f"{TB:+.2f} EUR",   "#27AE60"),
-    ("Ingreso Venta",   f"{TV:.2f} EUR",     CS),
-    ("Ingreso Reserva", f"{TR+TA:.2f} EUR",  "#7F8C8D"),
-    ("Coste Compra",    f"-{TC:.2f} EUR",    CB),
+    ("BENEFICIO NETO",   f"{TB:+.2f} EUR",   "#27AE60"),
+    ("Ingreso Venta",    f"{TV:.2f} EUR",     CS),
+    ("Ingreso Reserva",  f"{TR+TA:.2f} EUR",  "#7F8C8D"),
+    ("Coste Compra",     f"-{TC:.2f} EUR",    CB),
+    ("Coste Degradacion",f"-{TD:.2f} EUR",    CP),
 ]
 for i, (lbl, val, col) in enumerate(kpis):
     cx = (i + 0.5) / len(kpis)
