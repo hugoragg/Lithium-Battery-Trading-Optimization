@@ -255,11 +255,11 @@ categorias = ["Spot", "Disponib.", "Activación", "Degradación", "Penal. SOC"]
 # pero no el desglose, así que lo calculamos desde df_det si existe)
 if df_det is not None:
     from parametros import PI_DISP_UP, PI_DISP_DOWN, C_DEG
-    ing_spot_prev = (df_det["p_sell [€/MWh]"] * df_det["x_sell [MWh]"]
-                   - df_det["p_buy_eff [€/MWh]"] * df_det["x_buy [MWh]"]).sum()
+    ing_spot_prev = (df_det["p [€/MWh]"]     * df_det["x_sell [MWh]"]
+                   - df_det["p_eff [€/MWh]"] * df_det["x_buy [MWh]"]).sum()
     ing_disp_prev = (PI_DISP_UP * df_det["r_up [MWh]"] + PI_DISP_DOWN * df_det["r_down [MWh]"]).sum()
-    ing_act_prev  = ((df_det["p_act_up [€/MWh]"]   - df_det["p_sell [€/MWh]"])   * df_det["a_up [MWh]"]
-                   + (df_det["p_act_down [€/MWh]"] - df_det["p_buy_eff [€/MWh]"]) * df_det["a_down [MWh]"]).sum()
+    ing_act_prev  = ((df_det["pi_act_up [€/MWh]"]   - df_det["p [€/MWh]"])     * df_det["a_up [MWh]"]
+                   + (df_det["pi_act_down [€/MWh]"] - df_det["p_eff [€/MWh]"]) * df_det["a_down [MWh]"]).sum()
     deg_prev      = (C_DEG * (df_det["x_ch [MWh]"] + df_det["x_dis [MWh]"]
                               + df_det["a_up [MWh]"] + df_det["a_down [MWh]"])).sum()
     vals_prev = [ing_spot_prev, ing_disp_prev, ing_act_prev, -deg_prev, 0]

@@ -65,8 +65,9 @@ print(f"\n  Cargando resultados de: {csv_path}")
 
 # --- Validación de columnas ---
 cols_necesarias = [
-    "p_disp [€/MWh]", "p_act_up [€/MWh]", "p_act_down [€/MWh]",
-    "capacidad_nominal [MWh]", "soc_min_limit [MWh]"
+    "pi_disp_up [€/MWh]", "pi_disp_down [€/MWh]",
+    "pi_act_up [€/MWh]", "pi_act_down [€/MWh]",
+    "E_max [MWh]", "SOC_min [MWh]",
 ]
 for col in cols_necesarias:
     if col not in df.columns:
@@ -77,18 +78,19 @@ for col in cols_necesarias:
 # 2. PROCESAMIENTO DINÁMICO
 # =============================================================================
 
-E_MAX_CSV   = df["capacidad_nominal [MWh]"].iloc[0]
-SOC_MIN_CSV = df["soc_min_limit [MWh]"].iloc[0]
+E_MAX_CSV   = df["E_max [MWh]"].iloc[0]
+SOC_MIN_CSV = df["SOC_min [MWh]"].iloc[0]
 
 cols_fisicas = ["x_sell [MWh]", "x_buy [MWh]", "x_ch [MWh]", "x_dis [MWh]",
                 "r_up [MWh]", "r_down [MWh]", "a_up [MWh]", "a_down [MWh]"]
 df[cols_fisicas] = df[cols_fisicas].clip(lower=0)
 
-ing_venta  = df["p_sell [€/MWh]"] * df["x_sell [MWh]"]
-cst_compra = df["p_buy [€/MWh]"]  * df["x_buy [MWh]"]
-ing_disp   = df["p_disp [€/MWh]"] * (df["r_up [MWh]"] + df["r_down [MWh]"])
-ing_act    = ((df["p_act_up [€/MWh]"]   - df["p_sell [€/MWh]"]) * df["a_up [MWh]"]) \
-           + ((df["p_act_down [€/MWh]"] - df["p_buy [€/MWh]"])  * df["a_down [MWh]"])
+ing_venta  = df["p [€/MWh]"]     * df["x_sell [MWh]"]
+cst_compra = df["p_eff [€/MWh]"] * df["x_buy [MWh]"]
+ing_disp   = (df["pi_disp_up [€/MWh]"]   * df["r_up [MWh]"]
+            + df["pi_disp_down [€/MWh]"] * df["r_down [MWh]"])
+ing_act    = ((df["pi_act_up [€/MWh]"]   - df["p [€/MWh]"])     * df["a_up [MWh]"]) \
+           + ((df["pi_act_down [€/MWh]"] - df["p_eff [€/MWh]"]) * df["a_down [MWh]"])
 
 df["ben_neto"] = ing_venta - cst_compra + ing_disp + ing_act
 df["ben_acum"] = df["ben_neto"].cumsum()
@@ -136,7 +138,7 @@ fig1.suptitle(f"OPERACIÓN FÍSICA — BATERÍA {E_MAX_CSV} MWh  |  {fecha_str}"
               fontsize=12, fontweight="bold", y=0.96)
 
 ax = axes1[0, 0]
-ax.plot(x, df["p_sell [€/MWh]"], color=CP, lw=1.5)
+ax.plot(x, df["p [€/MWh]"], color=CP, lw=1.5)
 ax.set_title("Precio Mercado Diario (Venta)", **TKW)
 _ax(ax, "EUR/MWh"); _xt(ax)
 

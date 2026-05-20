@@ -71,8 +71,8 @@ N = len(resumen)
 x = np.arange(N)
 lbl = resumen["fecha"].dt.strftime("%d/%m")
 
-E_MAX_VAL   = detalle["capacidad_nominal [MWh]"].iloc[0] if not detalle.empty and "capacidad_nominal [MWh]" in detalle.columns else 2.0
-SOC_MIN_VAL = detalle["soc_min_limit [MWh]"].iloc[0]     if not detalle.empty and "soc_min_limit [MWh]"    in detalle.columns else 0.14
+E_MAX_VAL   = detalle["E_max [MWh]"].iloc[0]   if not detalle.empty and "E_max [MWh]"   in detalle.columns else 2.0
+SOC_MIN_VAL = detalle["SOC_min [MWh]"].iloc[0] if not detalle.empty and "SOC_min [MWh]" in detalle.columns else 0.14
 
 # =============================================================================
 # ESTILO — idéntico al visualizador diario
@@ -144,7 +144,7 @@ _ax(ax, "€"); _xt(ax)
 # ③ Desglose de ingresos diario (calculado desde CSVs cuartohorarios)
 ax = axes1[1, 0]
 if not detalle.empty and all(c in detalle.columns for c in [
-        "p_sell [€/MWh]", "p_buy_eff [€/MWh]",
+        "p [€/MWh]", "p_eff [€/MWh]",
         "x_sell [MWh]", "x_buy [MWh]",
         "r_up [MWh]", "r_down [MWh]",
         "a_up [MWh]", "a_down [MWh]"]):
@@ -152,11 +152,11 @@ if not detalle.empty and all(c in detalle.columns for c in [
     from parametros import PI_DISP_UP, PI_DISP_DOWN, PI_ACT_UP, PI_ACT_DOWN, C_DEG
 
     # Ingresos por intervalo
-    detalle["ing_arbitraje"]  = (detalle["p_sell [€/MWh]"]    * detalle["x_sell [MWh]"]
-                                - detalle["p_buy_eff [€/MWh]"] * detalle["x_buy [MWh]"])
+    detalle["ing_arbitraje"]  = (detalle["p [€/MWh]"]     * detalle["x_sell [MWh]"]
+                                - detalle["p_eff [€/MWh]"] * detalle["x_buy [MWh]"])
     detalle["ing_disp"]       = PI_DISP_UP * detalle["r_up [MWh]"] + PI_DISP_DOWN * detalle["r_down [MWh]"]
-    detalle["ing_activacion"] = ((PI_ACT_UP   - detalle["p_sell [€/MWh]"]) * detalle["a_up [MWh]"]
-                                + (PI_ACT_DOWN - detalle["p_buy_eff [€/MWh]"]) * detalle["a_down [MWh]"])
+    detalle["ing_activacion"] = ((PI_ACT_UP   - detalle["p [€/MWh]"])     * detalle["a_up [MWh]"]
+                                + (PI_ACT_DOWN - detalle["p_eff [€/MWh]"]) * detalle["a_down [MWh]"])
     detalle["cst_deg"]        = C_DEG * (detalle["x_ch [MWh]"] + detalle["x_dis [MWh]"]
                                         + detalle["a_up [MWh]"] + detalle["a_down [MWh]"])
 
