@@ -14,11 +14,17 @@ Uso:
     python run.py 1 2026 --force  # rehace todos los pasos aunque existan
 """
 
+import os
 import sys
 import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+
+# Fuerza UTF-8 en los subprocesos para que prints con tildes / flechas no
+# casquen bajo el codec cp1252 por defecto de Windows cuando stdout esta
+# capturado/redirigido.
+ENV = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
 
 NOMBRES_MES = {
     1: "Enero",      2: "Febrero",   3: "Marzo",      4: "Abril",
@@ -58,7 +64,7 @@ def resumen_sim(mes: int, anio: int) -> Path:
 def ejecutar(modulo: str, *args: str) -> None:
     cmd = [sys.executable, "-m", modulo, *args]
     print(f"  >>> {' '.join(cmd[1:])}")
-    res = subprocess.run(cmd, cwd=ROOT)
+    res = subprocess.run(cmd, cwd=ROOT, env=ENV)
     if res.returncode != 0:
         print(f"  [!] {modulo} fallo (codigo {res.returncode})")
         sys.exit(res.returncode)
