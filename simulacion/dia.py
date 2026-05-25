@@ -22,10 +22,6 @@ SOC y penalizaciones:
   · Penalización dinámica si SOC final ≠ SOC_INIT:
       - Déficit  → coste de reposición  = |desviación| × precio_medio_día
       - Exceso   → coste de oportunidad = desviación   × precio_medio_día
-
-Casos extremos:
-  · Escenarios normales   (distribución general)
-  · Escenarios extremos   (P95/P99 — amplificador ×3)
 """
 
 import sys
@@ -98,47 +94,45 @@ def obtener_schedule(precios_previstos: np.ndarray, solver: str = "highs") -> di
 def generar_escenario_ejecucion(
     schedule: dict,
     rng: np.random.Generator,
-    sigma_spot: float       = 0.12,
-    sigma_pi_disp: float    = 0.05,
-    sigma_pi_act: float     = 0.10,
-    p_no_puja: float        = 0.05,
-    sigma_activacion: float = 0.15,
-    p_fallo_tecnico: float  = 0.02,
-    extremo: bool           = False,
+    sigma_spot: float            = 0.12,
+    sigma_pi_disp_up: float      = 0.1786,
+    sigma_pi_disp_down: float    = 0.3642,
+    sigma_pi_act_up: float       = 0.4195,
+    sigma_pi_act_down: float     = 1.0268,
+    p_no_puja: float             = 0.05,
+    sigma_activacion_up: float   = 0.4229,
+    sigma_activacion_down: float = 0.4334,
+    p_fallo_tecnico: float       = 0.02,
 ) -> dict:
     """
     Genera un escenario de ejecución real dado el schedule fijo.
-    En modo extremo amplifica todos los factores de riesgo × 3.
     """
     T            = 96
     precios_prev = schedule["precios_previstos"]
-    amp          = 3.0 if extremo else 1.0
 
     # 1. Precios spot reales — error lognormal multiplicativo
     epsilon        = rng.standard_normal(T)
-    factor         = np.exp(sigma_spot * amp * epsilon)
+    factor         = np.exp(sigma_spot * epsilon)
     precios_reales = np.sign(precios_prev) * np.abs(precios_prev) * factor
 
     # 2. Precios de reserva reales — lognormal escalar (ruido independiente up/down)
-    pi_disp_up_real   = PI_DISP_UP   * np.exp(sigma_pi_disp * amp * rng.standard_normal())
-    pi_disp_down_real = PI_DISP_DOWN * np.exp(sigma_pi_disp * amp * rng.standard_normal())
-    pi_act_up_real    = PI_ACT_UP    * np.exp(sigma_pi_act  * amp * rng.standard_normal())
-    pi_act_down_real  = PI_ACT_DOWN  * np.exp(sigma_pi_act  * amp * rng.standard_normal())
+    pi_disp_up_real   = PI_DISP_UP   * np.exp(sigma_pi_disp_up   * rng.standard_normal())
+    pi_disp_down_real = PI_DISP_DOWN * np.exp(sigma_pi_disp_down * rng.standard_normal())
+    pi_act_up_real    = PI_ACT_UP    * np.exp(sigma_pi_act_up    * rng.standard_normal())
+    pi_act_down_real  = PI_ACT_DOWN  * np.exp(sigma_pi_act_down  * rng.standard_normal())
 
     # 3. Pujas perdidas — Bernoulli por intervalo
-    p_adj        = min(p_no_puja * amp, 0.95)
-    no_gana_puja = rng.random(T) < p_adj
+    no_gana_puja = rng.random(T) < p_no_puja
 
     # 4. Activación real de reserva — factor lognormal sobre lo previsto
     #    Puede ser mayor o menor que lo asumido por el modelo
-    factor_act_up   = np.exp(sigma_activacion * amp * rng.standard_normal())
-    factor_act_down = np.exp(sigma_activacion * amp * rng.standard_normal())
+    factor_act_up   = np.exp(sigma_activacion_up   * rng.standard_normal())
+    factor_act_down = np.exp(sigma_activacion_down * rng.standard_normal())
     a_up_real   = np.clip(schedule["a_up_prev"]   * factor_act_up,   0, schedule["r_up"])
     a_down_real = np.clip(schedule["a_down_prev"] * factor_act_down, 0, schedule["r_down"])
 
     # 5. Fallos técnicos — Bernoulli por intervalo
-    p_fallo_adj   = min(p_fallo_tecnico * amp, 0.5)
-    fallo_tecnico = rng.random(T) < p_fallo_adj
+    fallo_tecnico = rng.random(T) < p_fallo_tecnico
 
     return {
         "precios_reales":     precios_reales,
@@ -152,7 +146,6 @@ def generar_escenario_ejecucion(
         "fallo_tecnico":      fallo_tecnico,
         "factor_act_up":      factor_act_up,
         "factor_act_down":    factor_act_down,
-        "extremo":            extremo,
     }
 
 
@@ -185,6 +178,7 @@ def simular_ejecucion(schedule: dict, escenario: dict) -> dict:
     energia_no_cargada     = 0.0
     energia_no_operada     = 0.0
     energia_recortada      = 0.0
+    penalizacion_ree       = 0.0
     intervalos_soc_critico = 0
 
     p_reales    = escenario["precios_reales"]
@@ -239,6 +233,9 @@ def simular_ejecucion(schedule: dict, escenario: dict) -> dict:
             a_down_t   = a_down_r[t]
 
         # ------ Recorte proporcional por SOC insuficiente ------
+        a_up_pre_cut   = a_up_t
+        a_down_pre_cut = a_down_t
+
         descarga_total = x_dis_real + a_up_t
 
         if descarga_total > 0:
@@ -249,6 +246,15 @@ def simular_ejecucion(schedule: dict, escenario: dict) -> dict:
                 x_dis_real     = x_dis_real * ratio
                 a_up_t         = a_up_t     * ratio
                 intervalos_soc_critico += 1
+
+        # ------ Penalización por incumplimiento con REE ------
+        no_entregado_up   = a_up_pre_cut   - a_up_t
+        no_entregado_down = a_down_pre_cut - a_down_t
+        penalizacion_ree_t = 2.0 * (
+            no_entregado_up   * (pi_act_up   - p_real)
+          + no_entregado_down * (pi_act_down - p_eff)
+        )
+        penalizacion_ree += penalizacion_ree_t
 
         # ------ Actualizar SOC ------
         soc_nuevo = (soc
@@ -265,7 +271,7 @@ def simular_ejecucion(schedule: dict, escenario: dict) -> dict:
                     + (pi_act_down - p_eff)  * a_down_t)
         deg_t      = C_DEG * (x_ch_real + x_dis_real + a_up_t + a_down_t)
 
-        ben_t           = ing_spot_t + ing_disp_t + ing_act_t - deg_t
+        ben_t           = ing_spot_t + ing_disp_t + ing_act_t - deg_t - penalizacion_ree_t
         beneficio_real += ben_t
         ingreso_spot_real  += ing_spot_t
         ingreso_disp_real  += ing_disp_t
@@ -290,6 +296,7 @@ def simular_ejecucion(schedule: dict, escenario: dict) -> dict:
         "ingreso_disp_real [€]":    round(ingreso_disp_real, 4),
         "ingreso_act_real [€]":     round(ingreso_act_real, 4),
         "coste_deg_real [€]":       round(coste_deg_real, 4),
+        "penalizacion_ree [€]":     round(penalizacion_ree, 4),
         "penalizacion_soc [€]":     round(penalizacion_soc, 4),
         "soc_final [MWh]":          round(soc_final, 4),
         "soc_final_desv [MWh]":     round(desviacion_soc, 4),
@@ -306,7 +313,6 @@ def simular_ejecucion(schedule: dict, escenario: dict) -> dict:
         "factor_act_down":          round(escenario["factor_act_down"], 4),
         "n_pujas_perdidas":         int(escenario["no_gana_puja"].sum()),
         "n_fallos_tecnicos":        int(escenario["fallo_tecnico"].sum()),
-        "extremo":                  escenario["extremo"],
         "soc_series":               soc_series,
     }
 
@@ -317,79 +323,68 @@ def simular_ejecucion(schedule: dict, escenario: dict) -> dict:
 
 def run_simulacion(
     precios_previstos: np.ndarray,
-    n_normal: int           = 500,
-    n_extremo: int          = 100,
-    seed: int               = 42,
-    sigma_spot: float       = 0.12,
-    sigma_pi_disp: float    = 0.05,
-    sigma_pi_act: float     = 0.10,
-    p_no_puja: float        = 0.05,
-    sigma_activacion: float = 0.15,
-    p_fallo_tecnico: float  = 0.02,
-    solver: str             = "highs",
+    n_normal: int                = 500,
+    seed: int                    = 42,
+    sigma_spot: float            = 0.12,
+    sigma_pi_disp_up: float      = 0.1786,
+    sigma_pi_disp_down: float    = 0.3642,
+    sigma_pi_act_up: float       = 0.4195,
+    sigma_pi_act_down: float     = 1.0268,
+    p_no_puja: float             = 0.05,
+    sigma_activacion_up: float   = 0.4229,
+    sigma_activacion_down: float = 0.4334,
+    p_fallo_tecnico: float       = 0.02,
+    solver: str                  = "highs",
 ) -> tuple:
     """
-    Simulación Monte Carlo completa en dos modos:
-      · Normal  (n_normal escenarios)  — distribución general
-      · Extremo (n_extremo escenarios) — tail risk (P95/P99)
+    Simulación Monte Carlo completa (n_normal escenarios).
 
-    Devuelve: (df_normal, df_extremo, schedule)
+    Devuelve: (df_normal, schedule)
     """
     schedule = obtener_schedule(precios_previstos, solver=solver)
     rng      = np.random.default_rng(seed)
 
     kwargs_base = dict(
         sigma_spot=sigma_spot,
-        sigma_pi_disp=sigma_pi_disp,
-        sigma_pi_act=sigma_pi_act,
+        sigma_pi_disp_up=sigma_pi_disp_up,
+        sigma_pi_disp_down=sigma_pi_disp_down,
+        sigma_pi_act_up=sigma_pi_act_up,
+        sigma_pi_act_down=sigma_pi_act_down,
         p_no_puja=p_no_puja,
-        sigma_activacion=sigma_activacion,
+        sigma_activacion_up=sigma_activacion_up,
+        sigma_activacion_down=sigma_activacion_down,
         p_fallo_tecnico=p_fallo_tecnico,
     )
 
-    # Escenarios normales
-    print(f"Simulando {n_normal} escenarios normales...")
+    print(f"Simulando {n_normal} escenarios...")
     resultados_normal = []
     for i in range(n_normal):
         if i % 100 == 0:
             print(f"  {i+1}/{n_normal}", end="\r")
-        esc = generar_escenario_ejecucion(schedule, rng, extremo=False, **kwargs_base)
+        esc = generar_escenario_ejecucion(schedule, rng, **kwargs_base)
         res = simular_ejecucion(schedule, esc)
         res["sim_id"] = i + 1
         resultados_normal.append({k: v for k, v in res.items() if k != "soc_series"})
     df_normal = pd.DataFrame(resultados_normal)
 
-    # Escenarios extremos
-    print(f"\nSimulando {n_extremo} escenarios extremos (tail risk)...")
-    resultados_extremo = []
-    for i in range(n_extremo):
-        if i % 20 == 0:
-            print(f"  {i+1}/{n_extremo}", end="\r")
-        esc = generar_escenario_ejecucion(schedule, rng, extremo=True, **kwargs_base)
-        res = simular_ejecucion(schedule, esc)
-        res["sim_id"] = i + 1
-        resultados_extremo.append({k: v for k, v in res.items() if k != "soc_series"})
-    df_extremo = pd.DataFrame(resultados_extremo)
-
-    _imprimir_resumen(df_normal, df_extremo, schedule)
-    return df_normal, df_extremo, schedule
+    _imprimir_resumen(df_normal, schedule)
+    return df_normal, schedule
 
 
 # =============================================================================
 # RESUMEN
 # =============================================================================
 
-def _imprimir_resumen(df_normal: pd.DataFrame, df_extremo: pd.DataFrame, schedule: dict):
+def _imprimir_resumen(df_normal: pd.DataFrame, schedule: dict):
     ben_prev = schedule["beneficio_previsto"]
     ben_n    = df_normal["beneficio_real [€]"]
-    ben_e    = df_extremo["beneficio_real [€]"]
     pen_n    = df_normal["penalizacion_soc [€]"]
 
     print(f"\n\n{'='*65}")
     print(f"  RESULTADOS SIMULACIÓN DE EJECUCIÓN REAL")
     print(f"{'='*65}")
     print(f"  Beneficio PREVISTO (modelo):     {ben_prev:>10.2f} €")
-    print(f"\n  --- ESCENARIOS NORMALES ({len(df_normal)} sim.) ---")
+    print(f"\n  --- ESCENARIOS ({len(df_normal)} sim.) ---")
     print(f"  Beneficio medio real:            {ben_n.mean():>10.2f} €")
     print(f"  Desviación media vs previsto:    {(ben_n - ben_prev).mean():>10.2f} €")
     print(f"  Penalización SOC media:          {pen_n.mean():>10.2f} €")
@@ -398,13 +393,9 @@ def _imprimir_resumen(df_normal: pd.DataFrame, df_extremo: pd.DataFrame, schedul
     print(f"  P90 (optimista):                 {ben_n.quantile(0.90):>10.2f} €")
     print(f"  VaR 95% (peor 5%):               {ben_n.quantile(0.05):>10.2f} €")
     print(f"  % sim. con beneficio < 0:        {(ben_n < 0).mean()*100:>9.1f} %")
-    print(f"\n  --- ESCENARIOS EXTREMOS ({len(df_extremo)} sim.) ---")
-    print(f"  Beneficio medio (extremo):       {ben_e.mean():>10.2f} €")
-    print(f"  Peor escenario absoluto:         {ben_e.min():>10.2f} €")
-    print(f"  CVaR 95%:                        {ben_e[ben_e <= ben_e.quantile(0.05)].mean():>10.2f} €")
-    print(f"  Intervalos SOC crítico (media):  {df_extremo['intervalos_soc_critico'].mean():>10.1f}")
-    print(f"  Energía recortada media:         {df_extremo['energia_recortada [MWh]'].mean():>10.3f} MWh")
-    print(f"  SOC final medio (extremo):       {df_extremo['soc_final [MWh]'].mean():>10.3f} MWh")
+    print(f"  Intervalos SOC crítico (media):  {df_normal['intervalos_soc_critico'].mean():>10.1f}")
+    print(f"  Energía recortada media:         {df_normal['energia_recortada [MWh]'].mean():>10.3f} MWh")
+    print(f"  SOC final medio:                 {df_normal['soc_final [MWh]'].mean():>10.3f} MWh")
     print(f"  (SOC objetivo: {SOC_INIT:.3f} MWh)")
     print(f"{'='*65}\n")
 
@@ -451,18 +442,16 @@ if __name__ == "__main__":
 
     precios = fila[COLUMNAS_Q].values[0].astype(float)
 
-    n_sim_str = input("Número de simulaciones normales (Enter = 200): ").strip()
+    n_sim_str = input("Número de simulaciones (Enter = 200): ").strip()
     n_sim     = int(n_sim_str) if n_sim_str else 200
 
-    df_normal, df_extremo, schedule = run_simulacion(
+    df_normal, schedule = run_simulacion(
         precios_previstos = precios,
         n_normal          = n_sim,
-        n_extremo         = max(n_sim // 5, 20),
         seed              = 42,
     )
 
     carpeta = ROOT / "resultados" / "simulacion" / "dias_sueltos"
     carpeta.mkdir(parents=True, exist_ok=True)
-    df_normal.to_csv(carpeta  / f"sim_normal_{fecha_str}.csv",  index=False)
-    df_extremo.to_csv(carpeta / f"sim_extremo_{fecha_str}.csv", index=False)
-    print(f"\nCSVs guardados en '{carpeta}/'")
+    df_normal.to_csv(carpeta / f"sim_normal_{fecha_str}.csv", index=False)
+    print(f"\nCSV guardado en '{carpeta}/'")

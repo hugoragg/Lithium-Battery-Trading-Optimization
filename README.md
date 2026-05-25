@@ -206,12 +206,9 @@ estocásticas.
   respecto a `SOC_INIT` se penaliza con el precio medio del día, modelando el
   coste de reposición o de oportunidad asociado.
 
-### 6.3 Modos de simulación
+### 6.3 Número de escenarios
 
-- **Normales (200 escenarios por día)**: distribución general del riesgo.
-- **Extremos (40 escenarios por día)**: tail risk con todos los σ
-  amplificados por 3 — se usa para reportar VaR 95%, CVaR y peor escenario
-  absoluto.
+Se simulan 200 escenarios por día. La justificación del valor está en §6.4.
 
 ### 6.4 Análisis de convergencia
 
@@ -245,7 +242,7 @@ Modelo VSCode/
 │   ├── dia.py                # Dashboard operacion y economia de 1 dia
 │   ├── mes.py                # 4 dashboards mensuales (det)
 │   ├── sim_dia.py            # Distribucion de beneficios de 1 dia (MC)
-│   ├── sim_mes.py            # 4 dashboards mensuales (sim) con stress test
+│   ├── sim_mes.py            # 3 dashboards mensuales (sim)
 │   └── anual.py              # Comparador det/sim/comp sobre rango de meses
 │
 ├── datos/
@@ -275,7 +272,7 @@ para cada uno, encadena:
 2. `optimizacion.mes` — resuelve el MILP día a día, guarda 1 CSV por día
    más un resumen del mes
 3. `simulacion.mes` — para cada día, optimiza y ejecuta 200 escenarios
-   normales + 40 extremos, guarda CSVs por día y un resumen estadístico
+   Monte Carlo, guarda CSVs por día y un resumen estadístico
 
 Los pasos ya completados se saltan automáticamente.
 

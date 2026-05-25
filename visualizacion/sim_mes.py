@@ -3,9 +3,8 @@ Visualizacion Mensual de Simulacion - Dashboard de Riesgo
 Autor: Hugo Raggini Paternain
 
 Dashboard 1: Beneficio previsto vs real
-Dashboard 2: SOC, penalizaciones y fallos (normales)
-Dashboard 3: Stress test con comparativa
-Dashboard 4: Tabla de metricas clave del mes
+Dashboard 2: SOC, penalizaciones y fallos
+Dashboard 3: Tabla de metricas clave del mes
 
 Uso:
     python -m visualizacion.sim_mes              # interactivo
@@ -63,8 +62,8 @@ for _, fila in res.iterrows():
         dfs_sim.append(pd.read_csv(csv_dia))
 
 sim_all  = pd.concat(dfs_sim, ignore_index=True) if dfs_sim else pd.DataFrame()
-sim_norm = sim_all[sim_all["tipo"] == "normal"]  if not sim_all.empty else pd.DataFrame()
-sim_ext  = sim_all[sim_all["tipo"] == "extremo"] if not sim_all.empty else pd.DataFrame()
+# Compatibilidad con CSVs antiguos que aun contienen columna 'tipo'
+sim_norm = sim_all[sim_all["tipo"] == "normal"] if (not sim_all.empty and "tipo" in sim_all.columns) else sim_all
 
 N   = len(res)
 x   = np.arange(N)
@@ -99,15 +98,6 @@ for _, fila in res.iterrows():
     else:
         p5_diario.append(np.nan)
 p5_diario = np.array(p5_diario)
-
-# Stress
-if not sim_ext.empty:
-    ben_ext_global = sim_ext["beneficio_real [€]"].values
-    stress_medio   = ben_ext_global.mean()
-    stress_p5      = np.percentile(ben_ext_global, 5)
-    pct_neg_ext    = (ben_ext_global < 0).mean() * 100
-else:
-    stress_medio = stress_p5 = pct_neg_ext = 0
 
 pen_total = res["penalizacion_soc_media [€]"].sum() if tiene_pen else 0
 
@@ -196,7 +186,7 @@ plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 fig2, axes2 = plt.subplots(2, 2, figsize=(14, 8), facecolor=BG)
 fig2.canvas.manager.set_window_title(f"Sim 2 - SOC y Fallos | {TITULO_MES}")
 fig2.suptitle(
-    f"SOC, PENALIZACIONES Y FALLOS (escenarios normales) - {TITULO_MES}    "
+    f"SOC, PENALIZACIONES Y FALLOS - {TITULO_MES}    "
     f"[Penaliz. SOC total: {pen_total:.2f}E  |  "
     f"Pujas perdidas: {res['pujas_perdidas_media'].sum():.0f}  |  "
     f"Fallos tecnicos: {res['fallos_tecnicos_media'].sum():.0f}]",
@@ -244,132 +234,11 @@ _ax(ax, "MWh"); _xt(ax)
 plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 
 # =============================================================================
-# DASHBOARD 3 — STRESS TEST CON COMPARATIVA
-# =============================================================================
-
-fig3, axes3 = plt.subplots(2, 2, figsize=(14, 8), facecolor=BG)
-fig3.canvas.manager.set_window_title(f"Sim 3 - STRESS TEST | {TITULO_MES}")
-fig3.suptitle(
-    f"STRESS TEST (escenarios extremos x3) - {TITULO_MES}    "
-    f"[Media stress: {stress_medio:+.2f}E  |  "
-    f"P5 stress: {stress_p5:+.2f}E  |  "
-    f"% negativos: {pct_neg_ext:.1f}%]",
-    fontsize=11, fontweight="bold", y=0.97
-)
-
-# Histograma normal vs stress — frecuencia absoluta
-ax = axes3[0, 0]
-if not sim_norm.empty and not sim_ext.empty:
-    bn = sim_norm["beneficio_real [€]"].values
-    be = sim_ext["beneficio_real [€]"].values
-    rango = (min(bn.min(), be.min()) * 1.05, max(bn.max(), be.max()) * 1.05)
-    ax.hist(bn, bins=50, range=rango, color=CCH, alpha=0.6, density=True,
-            label=f"Normal  (n={len(bn):,})  P50={np.median(bn):.0f}E")
-    ax.hist(be, bins=50, range=rango, color=CB,  alpha=0.6, density=True,
-            label=f"Stress  (n={len(be):,})  P50={np.median(be):.0f}E")
-    ax.axvline(np.percentile(bn, 5), color=CCH, lw=2, ls=":",
-               label=f"P5 normal: {np.percentile(bn,5):.0f}E")
-    ax.axvline(np.percentile(be, 5), color=CB,  lw=2, ls=":",
-               label=f"P5 stress: {np.percentile(be,5):.0f}E")
-    ax.axvline(0, color="#AAAAAA", lw=0.8, ls="--")
-ax.set_title("Distribucion Normal vs Stress (densidad)", **TKW)
-_ax(ax, "frecuencia")
-ax.set_xlabel("Beneficio (EUR)", fontsize=8, color="#555")
-ax.legend(fontsize=7, framealpha=0.8, edgecolor="none")
-
-# Media normal vs stress por dia
-ax = axes3[0, 1]
-ax.plot(x, res["ben_medio [€]"],         color=CS,  lw=2, marker="o", ms=3, label="Media normal")
-ax.plot(x, res["ben_extremo_medio [€]"], color=CB,  lw=2, marker="s", ms=3, label="Media stress")
-ax.plot(x, res["peor_escenario [€]"],    color=CRU, lw=1.5, ls="--", marker="^", ms=3,
-        label="Peor escenario stress")
-ax.fill_between(x, res["peor_escenario [€]"], res["ben_medio [€]"],
-                alpha=0.08, color=CB, label="Brecha normal-stress")
-ax.axhline(0, color="#AAAAAA", lw=0.8, ls="--")
-ax.set_title("Media Normal vs Stress por Dia", **TKW)
-_ax(ax, "EUR"); _xt(ax); ax.legend(**GKW)
-
-# SOC critico y energia recortada en stress — separados con doble eje claro
-ax = axes3[1, 0]
-# Barras de SOC critico con colores semaforo
-colores_soc = [CB if v > 5 else CF if v > 2 else CS for v in res["soc_critico_medio"]]
-bars = ax.bar(x, res["soc_critico_medio"], color=colores_soc, alpha=0.8, width=0.7,
-              label="Intervalos SOC critico (eje izq.)")
-ax.axhline(res["soc_critico_medio"].mean(), color=CACC, lw=1.5, ls=":",
-           label=f"Media SOC critico: {res['soc_critico_medio'].mean():.1f}")
-_ax(ax, "Intervalos SOC critico"); _xt(ax)
-
-if "energia_recortada_ext [MWh]" in res.columns:
-    ax2r = ax.twinx()
-    ax2r.plot(x, res["energia_recortada_ext [MWh]"],
-              color="#F1C40F", lw=2.5, marker="D", ms=5, ls="-",
-              label="Energia recortada stress (eje der.)")
-    ax2r.set_ylabel("Energia recortada stress (MWh)", fontsize=8, color="#F1C40F")
-    ax2r.tick_params(colors="#F1C40F", labelsize=8)
-    ax2r.spines[["top"]].set_visible(False)
-    lines2, labs2 = ax2r.get_legend_handles_labels()
-else:
-    lines2, labs2 = [], []
-
-patch_r = mpatches.Patch(color=CB, alpha=0.8, label=">5 intervalos (alto riesgo)")
-patch_a = mpatches.Patch(color=CF, alpha=0.8, label="2-5 intervalos (medio)")
-patch_g = mpatches.Patch(color=CS, alpha=0.8, label="<2 intervalos (bajo)")
-line_m  = plt.Line2D([0], [0], color=CACC, lw=1.5, ls=":",
-                     label=f"Media: {res['soc_critico_medio'].mean():.1f}")
-ax.legend(handles=[patch_r, patch_a, patch_g, line_m] + [
-    plt.Line2D([0], [0], color="#F1C40F", lw=2.5, marker="D", ms=5, ls="-",
-               label="Energia recortada stress")
-] if lines2 else [patch_r, patch_a, patch_g, line_m],
-    fontsize=7, framealpha=0.8, edgecolor="none", loc="upper left")
-ax.set_title("SOC Critico e Energia Recortada (Stress)", **TKW)
-
-# Tabla comparativa normal vs stress
-ax = axes3[1, 1]
-ax.axis("off")
-
-pen_norm = res["penalizacion_soc_media [€]"].sum()     if tiene_pen else 0
-pen_str  = res["penalizacion_soc_ext [€]"].sum()       if "penalizacion_soc_ext [€]"      in res.columns else 0
-rec_norm = res["energia_recortada_media [MWh]"].mean() if tiene_rec else 0
-rec_str  = res["energia_recortada_ext [MWh]"].mean()   if "energia_recortada_ext [MWh]"   in res.columns else 0
-p50_str  = res["ben_extremo_medio [€]"].sum()
-
-filas_tabla = [
-    ("METRICA",                  "NORMAL",                              "STRESS x3"),
-    ("Beneficio total P50",      f"{p50_total:+.0f} EUR",               f"{p50_str:+.0f} EUR"),
-    ("P5 (peor 5% de dias)",     f"{np.nanmean(p5_diario):+.0f} EUR/dia", f"{stress_p5:+.0f} EUR/dia"),
-    ("Peor dia",                 f"{res['ben_P10 [€]'].min():+.0f} EUR", f"{res['peor_escenario [€]'].min():+.0f} EUR"),
-    ("% simulaciones negativas", f"{res['pct_negativo [%]'].mean():.1f}%", f"{pct_neg_ext:.1f}%"),
-    ("Penalizacion SOC total",   f"{pen_norm:.0f} EUR",                 f"{pen_str:.0f} EUR"),
-    ("Energia recortada media",  f"{rec_norm:.4f} MWh/dia",             f"{rec_str:.4f} MWh/dia"),
-]
-
-# Cabecera
-for i, (metrica, val_n, val_s) in enumerate(filas_tabla):
-    y     = 1 - (i + 0.5) / len(filas_tabla)
-    peso  = "bold" if i == 0 else "normal"
-    c_met = CACC   if i == 0 else "#555"
-    c_n   = CS     if i > 0  else CS
-    c_s   = CRU    if i > 0  else CB
-    ax.text(0.02, y, metrica, transform=ax.transAxes,
-            fontsize=9, color=c_met, va="center", fontweight=peso)
-    ax.text(0.50, y, val_n,   transform=ax.transAxes,
-            fontsize=9, color=c_n,   va="center", fontweight=peso)
-    ax.text(0.76, y, val_s,   transform=ax.transAxes,
-            fontsize=9, color=c_s,   va="center", fontweight=peso)
-    if i == 0:
-        ax.plot([0, 1], [y - 0.5/len(filas_tabla), y - 0.5/len(filas_tabla)],
-                color="#CCCCCC", lw=1, transform=ax.transAxes, clip_on=False)
-
-ax.set_title("Comparativa Normal vs Stress", **TKW)
-
-plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-
-# =============================================================================
-# DASHBOARD 4 — TABLA DE METRICAS CLAVE (pantalla completa)
+# DASHBOARD 3 — TABLA DE METRICAS CLAVE (pantalla completa)
 # =============================================================================
 
 fig4 = plt.figure(figsize=(12, 8), facecolor=BG)
-fig4.canvas.manager.set_window_title(f"Sim 4 - Metricas Clave | {TITULO_MES}")
+fig4.canvas.manager.set_window_title(f"Sim 3 - Metricas Clave | {TITULO_MES}")
 fig4.suptitle(f"METRICAS CLAVE DEL MES - {TITULO_MES}",
               fontsize=13, fontweight="bold", y=0.97)
 
@@ -442,7 +311,6 @@ plt.tight_layout(rect=[0, 0.03, 1, 0.94])
 
 print(f"\n=== Dashboards generados - {TITULO_MES} ===")
 print(f"  Dashboard 1: Beneficio previsto vs real")
-print(f"  Dashboard 2: SOC, penalizaciones y fallos (normales)")
-print(f"  Dashboard 3: Stress test con comparativa")
-print(f"  Dashboard 4: Metricas clave del mes (tabla completa)")
+print(f"  Dashboard 2: SOC, penalizaciones y fallos")
+print(f"  Dashboard 3: Metricas clave del mes (tabla completa)")
 plt.show()

@@ -46,23 +46,19 @@ except Exception:
 # CARGA DE DATOS
 # =============================================================================
 
-csv_normal  = CARPETA_SIM / f"sim_normal_{fecha_str}.csv"
-csv_extremo = CARPETA_SIM / f"sim_extremo_{fecha_str}.csv"
+csv_normal = CARPETA_SIM / f"sim_normal_{fecha_str}.csv"
 
-for f in [csv_normal, csv_extremo]:
-    if not f.exists():
-        print(f"[!] No se encuentra '{f}'. Ejecuta primero `python -m simulacion.dia`.")
-        sys.exit()
+if not csv_normal.exists():
+    print(f"[!] No se encuentra '{csv_normal}'. Ejecuta primero `python -m simulacion.dia`.")
+    sys.exit()
 
 df_n = pd.read_csv(csv_normal)
-df_e = pd.read_csv(csv_extremo)
 
 # SOC previsto — desde resultados/dias_sueltos si existe
 csv_det = CARPETA_DET / f"resultado_{fecha_str}.csv"
 df_det  = pd.read_csv(csv_det) if csv_det.exists() else None
 
-print(f"  Simulaciones normales : {len(df_n)}")
-print(f"  Simulaciones extremas : {len(df_e)}\n")
+print(f"  Simulaciones : {len(df_n)}\n")
 
 ben_prev = df_n["beneficio_previsto [€]"].iloc[0]
 
@@ -103,7 +99,6 @@ fig1, axes1 = plt.subplots(2, 2, figsize=(14, 8), facecolor=BG)
 fig1.canvas.manager.set_window_title(f"Simulación — Distribución | {fecha_str}")
 
 ben_n  = df_n["beneficio_real [€]"]
-ben_e  = df_e["beneficio_real [€]"]
 p10    = ben_n.quantile(0.10)
 p50    = ben_n.quantile(0.50)
 p90    = ben_n.quantile(0.90)
@@ -117,48 +112,45 @@ fig1.suptitle(
     fontsize=11, fontweight="bold", y=0.97
 )
 
-# ① Histograma normales con percentiles y previsto
+# ① Histograma con percentiles y previsto
 ax = axes1[0, 0]
-rango = (min(ben_n.min(), ben_e.min()) * 1.05,
-         max(ben_n.max(), ben_e.max()) * 1.05)
+rango = (ben_n.min() * 1.05, ben_n.max() * 1.05)
 ax.hist(ben_n.values, bins=40, range=rango, color=CCH, alpha=0.7,
-        label=f"Normales (n={len(df_n)})")
+        label=f"Simulaciones (n={len(df_n)})")
 ax.axvline(p10,      color=CB,   lw=1.5, ls="--", label=f"P10: {p10:.1f}€")
 ax.axvline(p50,      color=CS,   lw=2,   ls="-",  label=f"P50: {p50:.1f}€")
 ax.axvline(p90,      color=CAU,  lw=1.5, ls="--", label=f"P90: {p90:.1f}€")
 ax.axvline(var95,    color=CB,   lw=2,   ls=":",  label=f"VaR95: {var95:.1f}€")
 ax.axvline(ben_prev, color=CACC, lw=2,   ls="-",  label=f"Previsto: {ben_prev:.1f}€")
 ax.axvline(0, color="#AAAAAA", lw=0.8, ls="--")
-ax.set_title("① Distribución Beneficios — Normales", **TKW)
+ax.set_title("① Distribución Beneficios", **TKW)
 _ax(ax, "frecuencia")
 ax.set_xlabel("Beneficio (€)", fontsize=8, color="#555")
 ax.legend(fontsize=7, framealpha=0.8, edgecolor="none")
 
-# ② Normales vs extremos superpuestos (densidad)
+# ② Densidad con previsto
 ax = axes1[0, 1]
 ax.hist(ben_n.values, bins=40, range=rango, color=CCH, alpha=0.6,
-        density=True, label=f"Normales  med={ben_n.mean():.1f}€")
-ax.hist(ben_e.values, bins=40, range=rango, color=CB,  alpha=0.6,
-        density=True, label=f"Extremos  med={ben_e.mean():.1f}€")
+        density=True, label=f"Simulaciones  med={ben_n.mean():.1f}€")
 ax.axvline(ben_prev, color=CACC, lw=2, ls="--", label=f"Previsto: {ben_prev:.1f}€")
 ax.axvline(0, color="#AAAAAA", lw=0.8, ls="--")
-ax.set_title("② Normales vs Extremos (densidad)", **TKW)
+ax.set_title("② Densidad de Beneficios", **TKW)
 _ax(ax, "densidad")
 ax.set_xlabel("Beneficio (€)", fontsize=8, color="#555")
 ax.legend(fontsize=7, framealpha=0.8, edgecolor="none")
 
-# ③ Box plot comparativo
+# ③ Box plot
 ax = axes1[1, 0]
-bp = ax.boxplot([ben_n.values, ben_e.values],
-                labels=["Normales", "Extremos"],
+bp = ax.boxplot([ben_n.values],
+                labels=["Simulaciones"],
                 patch_artist=True,
                 medianprops=dict(color="white", lw=2))
-for patch, color in zip(bp["boxes"], [CCH, CB]):
-    patch.set_facecolor(color)
+for patch in bp["boxes"]:
+    patch.set_facecolor(CCH)
     patch.set_alpha(0.7)
 ax.axhline(ben_prev, color=CACC, lw=1.5, ls="--", label=f"Previsto: {ben_prev:.1f}€")
 ax.axhline(0, color="#AAAAAA", lw=0.8, ls="--")
-ax.set_title("③ Box Plot — Normales vs Extremos", **TKW)
+ax.set_title("③ Box Plot — Distribución", **TKW)
 _ax(ax, "€"); ax.legend(**GKW)
 
 # ④ KPIs resumen
@@ -171,8 +163,8 @@ metricas = [
     ("P90 (optimista)",      f"{p90:+.2f} €",                        CAU),
     ("VaR 95%",              f"{var95:+.2f} €",                      CB),
     ("Coste incertidumbre",  f"{coste_incert:+.2f} € ({coste_incert/max(abs(ben_prev),1)*100:.1f}%)", CF),
-    ("Media extremos",       f"{ben_e.mean():+.2f} €",               CB),
-    ("Peor escenario",       f"{ben_e.min():+.2f} €",                CRU),
+    ("Media real",           f"{ben_n.mean():+.2f} €",               CS),
+    ("Peor escenario",       f"{ben_n.min():+.2f} €",                CRU),
     ("% sim. negativas",     f"{(ben_n < 0).mean()*100:.1f} %",      CF),
     ("Penaliz. SOC media",   f"{df_n['penalizacion_soc [€]'].mean():.2f} €", CP),
 ]
@@ -205,11 +197,10 @@ if df_det is not None and "SOC [MWh]" in df_det.columns:
             label="SOC previsto (modelo)")
 
 soc_finals_n = df_n["soc_final [MWh]"].values
-soc_finals_e = df_e["soc_final [MWh]"].values
 
 ax2b = ax.twinx()
-ax2b.boxplot([soc_finals_n, soc_finals_e],
-             positions=[88, 93], widths=3,
+ax2b.boxplot([soc_finals_n],
+             positions=[90], widths=3,
              patch_artist=True,
              boxprops=dict(facecolor=CCH, alpha=0.5),
              medianprops=dict(color="white", lw=2))
@@ -230,18 +221,12 @@ ax.legend(fontsize=7, framealpha=0.8, edgecolor="none")
 # ⑥ Desvío SOC final
 ax = axes2[0, 1]
 desv_n  = df_n["soc_final_desv [MWh]"].values
-desv_e  = df_e["soc_final_desv [MWh]"].values
-rango_d = (min(desv_n.min(), desv_e.min()) - 0.05,
-           max(desv_n.max(), desv_e.max()) + 0.05)
+rango_d = (desv_n.min() - 0.05, desv_n.max() + 0.05)
 ax.hist(desv_n, bins=30, range=rango_d, color=CCH, alpha=0.6,
-        density=True, label="Normales")
-ax.hist(desv_e, bins=30, range=rango_d, color=CB,  alpha=0.6,
-        density=True, label="Extremos")
+        density=True, label="Simulaciones")
 ax.axvline(0, color=CACC, lw=2, ls="--", label="Sin desvío")
 ax.axvline(desv_n.mean(), color=CCH, lw=1.5, ls=":",
-           label=f"Media N: {desv_n.mean():+.3f} MWh")
-ax.axvline(desv_e.mean(), color=CB,  lw=1.5, ls=":",
-           label=f"Media E: {desv_e.mean():+.3f} MWh")
+           label=f"Media: {desv_n.mean():+.3f} MWh")
 ax.set_title("⑥ Distribución Desvío SOC Final", **TKW)
 _ax(ax, "densidad")
 ax.set_xlabel("Desvío SOC final (MWh)", fontsize=8, color="#555")
@@ -320,7 +305,7 @@ lines1, labs1 = ax.get_legend_handles_labels()
 lines2, labs2 = ax2r.get_legend_handles_labels()
 ax.legend(lines1 + lines2, labs1 + labs2,
           fontsize=7, framealpha=0.8, edgecolor="none")
-ax.set_title("⑧ Penalización SOC y Energía Recortada (Normales)", **TKW)
+ax.set_title("⑧ Penalización SOC y Energía Recortada", **TKW)
 _ax(ax)
 
 plt.tight_layout(rect=[0, 0.03, 1, 0.95])

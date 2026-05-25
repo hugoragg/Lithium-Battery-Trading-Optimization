@@ -133,8 +133,6 @@ def agregar_mensual_sim(dfs_sim, meses):
             "std_medio [€/dia]":       df["ben_std [€]"].mean(),
             "desv_total [€]":          df["desv_media [€]"].sum(),
             "pct_neg_medio [%]":       df["pct_negativo [%]"].mean(),
-            "peor_dia [€]":            df["peor_escenario [€]"].min(),
-            "cvar_medio [€/dia]":      df["CVaR_95 [€]"].mean(),
             "coste_inc [€]":           df["beneficio_previsto [€]"].sum() - df["ben_P50 [€]"].sum(),
         }
         if "penalizacion_soc_media [€]" in df.columns:

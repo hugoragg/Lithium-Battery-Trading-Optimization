@@ -64,12 +64,15 @@ SOLVER_OPTIONS = {
 }
 
 PARAMS_SIM = {
-    "sigma_spot":       0.12,
-    "sigma_pi_disp":    0.05,
-    "sigma_pi_act":     0.10,
-    "p_no_puja":        0.05,
-    "sigma_activacion": 0.15,
-    "p_fallo_tecnico":  0.02,
+    "sigma_spot":            0.12,
+    "sigma_pi_disp_up":      0.1786,
+    "sigma_pi_disp_down":    0.3642,
+    "sigma_pi_act_up":       0.4195,
+    "sigma_pi_act_down":     1.0268,
+    "p_no_puja":             0.05,
+    "sigma_activacion_up":   0.4229,
+    "sigma_activacion_down": 0.4334,
+    "p_fallo_tecnico":       0.02,
 }
 
 # =============================================================================
@@ -83,8 +86,7 @@ else:
     MES  = int(input("Mes (numero 1-12): "))
     ANIO = int(input("Anio (ej. 2026): "))
 
-N_NORMAL  = int(sys.argv[3]) if len(sys.argv) >= 4 else 200
-N_EXTREMO = max(N_NORMAL // 5, 20)
+N_NORMAL = int(sys.argv[3]) if len(sys.argv) >= 4 else 200
 
 CSV_PRECIOS    = CARPETA_PRECIOS / f"precios_{NOMBRES_MES[MES].lower()}_{ANIO}.csv"
 CARPETA_SALIDA = ROOT / "resultados" / "simulacion" / f"{ANIO}-{MES:02d}"
@@ -135,13 +137,12 @@ def simular_dia(
     precios: np.ndarray,
     opt,
     n_normal: int,
-    n_extremo: int,
     seed: int,
 ) -> tuple:
     """
     Para un dia dado:
       1. Obtiene el schedule optimo
-      2. Simula n_normal escenarios normales + n_extremo extremos
+      2. Simula n_normal escenarios
       3. Devuelve (df_simulaciones, fila_resumen)
     """
     schedule = obtener_schedule_dia(precios, opt)
@@ -152,35 +153,20 @@ def simular_dia(
     filas = []
 
     for i in range(n_normal):
-        esc = generar_escenario_ejecucion(schedule, rng, extremo=False, **PARAMS_SIM)
+        esc = generar_escenario_ejecucion(schedule, rng, **PARAMS_SIM)
         res = simular_ejecucion(schedule, esc)
         filas.append({
             "fecha":  fecha,
             "sim_id": i + 1,
-            "tipo":   "normal",
-            **{k: v for k, v in res.items() if k != "soc_series"},
-        })
-
-    for i in range(n_extremo):
-        esc = generar_escenario_ejecucion(schedule, rng, extremo=True, **PARAMS_SIM)
-        res = simular_ejecucion(schedule, esc)
-        filas.append({
-            "fecha":  fecha,
-            "sim_id": n_normal + i + 1,
-            "tipo":   "extremo",
             **{k: v for k, v in res.items() if k != "soc_series"},
         })
 
     df_dia = pd.DataFrame(filas)
-    ben_n  = df_dia[df_dia["tipo"] == "normal"]["beneficio_real [€]"]
-    ben_e  = df_dia[df_dia["tipo"] == "extremo"]["beneficio_real [€]"]
-    df_nor = df_dia[df_dia["tipo"] == "normal"]
-    df_ext = df_dia[df_dia["tipo"] == "extremo"]
+    ben_n  = df_dia["beneficio_real [€]"]
 
     fila_resumen = {
         "fecha":                         fecha,
         "beneficio_previsto [€]":        round(schedule["beneficio_previsto"], 2),
-        # Normales
         "ben_medio [€]":                 round(ben_n.mean(), 2),
         "ben_std [€]":                   round(ben_n.std(), 2),
         "ben_P10 [€]":                   round(ben_n.quantile(0.10), 2),
@@ -191,22 +177,13 @@ def simular_dia(
         "desv_media [€]":                round((ben_n - schedule["beneficio_previsto"]).mean(), 2),
         "desv_media [%]":                round((ben_n - schedule["beneficio_previsto"]).mean()
                                                / max(abs(schedule["beneficio_previsto"]), 1) * 100, 1),
-        # Nuevas metricas de penalizacion y recorte
-        "penalizacion_soc_media [€]":    round(df_nor["penalizacion_soc [€]"].mean(), 2),
-        "energia_recortada_media [MWh]": round(df_nor["energia_recortada [MWh]"].mean(), 4),
-        "soc_final_desv_media [MWh]":    round(df_nor["soc_final_desv [MWh]"].mean(), 4),
-        # Extremos
-        "ben_extremo_medio [€]":         round(ben_e.mean(), 2),
-        "peor_escenario [€]":            round(ben_e.min(), 2),
-        "CVaR_95 [€]":                   round(ben_e[ben_e <= ben_e.quantile(0.05)].mean(), 2),
-        "soc_critico_medio":             round(df_ext["intervalos_soc_critico"].mean(), 1),
-        "penalizacion_soc_ext [€]":      round(df_ext["penalizacion_soc [€]"].mean(), 2),
-        "energia_recortada_ext [MWh]":   round(df_ext["energia_recortada [MWh]"].mean(), 4),
-        # Operacional
-        "pujas_perdidas_media":          round(df_nor["n_pujas_perdidas"].mean(), 1),
-        "fallos_tecnicos_media":         round(df_nor["n_fallos_tecnicos"].mean(), 1),
+        "penalizacion_soc_media [€]":    round(df_dia["penalizacion_soc [€]"].mean(), 2),
+        "energia_recortada_media [MWh]": round(df_dia["energia_recortada [MWh]"].mean(), 4),
+        "soc_final_desv_media [MWh]":    round(df_dia["soc_final_desv [MWh]"].mean(), 4),
+        "soc_critico_medio":             round(df_dia["intervalos_soc_critico"].mean(), 1),
+        "pujas_perdidas_media":          round(df_dia["n_pujas_perdidas"].mean(), 1),
+        "fallos_tecnicos_media":         round(df_dia["n_fallos_tecnicos"].mean(), 1),
         "n_sim_normal":                  n_normal,
-        "n_sim_extremo":                 n_extremo,
     }
 
     return df_dia, fila_resumen
@@ -233,11 +210,10 @@ if __name__ == "__main__":
 
     print(f"\n{'='*65}")
     print(f"  SIMULADOR MENSUAL — {NOMBRES_MES[MES]} {ANIO}")
-    print(f"  Dias a simular    : {len(df_precios)}")
-    print(f"  Sim. normales/dia : {N_NORMAL}")
-    print(f"  Sim. extremas/dia : {N_EXTREMO}")
-    print(f"  Precios desde     : {CSV_PRECIOS}")
-    print(f"  Carpeta salida    : {CARPETA_SALIDA}")
+    print(f"  Dias a simular : {len(df_precios)}")
+    print(f"  Sim. por dia   : {N_NORMAL}")
+    print(f"  Precios desde  : {CSV_PRECIOS}")
+    print(f"  Carpeta salida : {CARPETA_SALIDA}")
     print(f"{'='*65}\n")
 
     opt = pyo.SolverFactory(SOLVER)
@@ -261,7 +237,6 @@ if __name__ == "__main__":
             precios=precios,
             opt=opt,
             n_normal=N_NORMAL,
-            n_extremo=N_EXTREMO,
             seed=seed_dia,
         )
 
@@ -297,7 +272,7 @@ if __name__ == "__main__":
         p50_total  = df_resumen["ben_P50 [€]"].sum()
         coste_inc  = prev_total - p50_total
 
-        print(f"\n  --- ESCENARIOS NORMALES ---")
+        print(f"\n  --- RESULTADOS ---")
         print(f"  Beneficio previsto total  : {prev_total:>10.2f} E")
         print(f"  Beneficio P50 total       : {p50_total:>10.2f} E")
         print(f"  Coste incertidumbre total : {coste_inc:>10.2f} E ({coste_inc/max(abs(prev_total),1)*100:.1f}%)")
@@ -305,9 +280,6 @@ if __name__ == "__main__":
         print(f"  P90 acumulado (optimista) : {df_resumen['ben_P90 [€]'].sum():>10.2f} E")
         print(f"  Penaliz. SOC total media  : {df_resumen['penalizacion_soc_media [€]'].sum():>10.2f} E")
         print(f"  Energia recortada media   : {df_resumen['energia_recortada_media [MWh]'].mean():>10.4f} MWh/dia")
-        print(f"\n  --- ESCENARIOS EXTREMOS ---")
-        print(f"  Peor dia absoluto         : {df_resumen['peor_escenario [€]'].min():>10.2f} E")
-        print(f"  CVaR 95% medio            : {df_resumen['CVaR_95 [€]'].mean():>10.2f} E")
         print(f"\n  Resumen guardado : {csv_resumen}")
         print(f"  CSVs diarios en  : {CARPETA_SALIDA}/")
     print(f"{'='*65}\n")

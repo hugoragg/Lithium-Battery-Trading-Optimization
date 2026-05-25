@@ -44,12 +44,15 @@ N_REPETICIONES = 10
 SEED_BASE = 42
 
 PARAMS_SIM = {
-    "sigma_spot":       0.12,
-    "sigma_pi_disp":    0.05,
-    "sigma_pi_act":     0.10,
-    "p_no_puja":        0.05,
-    "sigma_activacion": 0.15,
-    "p_fallo_tecnico":  0.02,
+    "sigma_spot":            0.12,
+    "sigma_pi_disp_up":      0.1786,
+    "sigma_pi_disp_down":    0.3642,
+    "sigma_pi_act_up":       0.4195,
+    "sigma_pi_act_down":     1.0268,
+    "p_no_puja":             0.05,
+    "sigma_activacion_up":   0.4229,
+    "sigma_activacion_down": 0.4334,
+    "p_fallo_tecnico":       0.02,
 }
 
 # Estilo
@@ -134,7 +137,7 @@ for n in N_VALORES:
         bens = []
 
         for _ in range(n):
-            esc = generar_escenario_ejecucion(schedule, rng, extremo=False, **PARAMS_SIM)
+            esc = generar_escenario_ejecucion(schedule, rng, **PARAMS_SIM)
             res = simular_ejecucion(schedule, esc)
             bens.append(res["beneficio_real [€]"])
 
