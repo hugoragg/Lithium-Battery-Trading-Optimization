@@ -91,7 +91,7 @@ if __name__ == "__main__":
         fecha   = fila["fecha"]
         precios = fila[COLUMNAS_Q].values.astype(float)
 
-        print(f"  → {fecha} ...", end=" ", flush=True)
+        print(f"  -> {fecha} ...", end=" ", flush=True)
 
         try:
             model = construir_modelo(precios)

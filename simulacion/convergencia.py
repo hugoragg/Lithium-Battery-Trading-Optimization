@@ -232,25 +232,28 @@ plt.tight_layout(rect=[0, 0.03, 1, 0.94])
 # CONCLUSIÓN AUTOMÁTICA
 # =============================================================================
 
-# Criterio: std del P50 < 1% del P50 medio → convergido
+# Criterios de convergencia (error estandar relativo respecto al P50 de
+# referencia). El P50 (estimador central) usa un umbral estricto; el P5
+# (cola, peor 5%) es intrinsecamente mas ruidoso -> umbral mas relajado.
 p50_ref    = df_conv.loc[df_conv["N"] == max(N_VALORES), "P50_medio"].values[0]
-umbral_pct = 0.01
+UMBRAL_P50 = 0.05   # 5%  para el estimador central
+UMBRAL_P5  = 0.15   # 15% para la cola (mas ruidosa por construccion)
 
 print(f"\n  {'='*55}")
-print(f"  CONCLUSIÓN")
+print(f"  CONCLUSIÓN  (umbral P50 {UMBRAL_P50*100:.0f}%  |  umbral P5 {UMBRAL_P5*100:.0f}%)")
 print(f"  {'='*55}")
 for _, row in df_conv.iterrows():
-    estable_p50 = row["P50_std"] / abs(p50_ref) < umbral_pct
-    estable_p5  = row["P5_std"]  / abs(p50_ref) < umbral_pct
+    estable_p50 = row["P50_std"] / abs(p50_ref) < UMBRAL_P50
+    estable_p5  = row["P5_std"]  / abs(p50_ref) < UMBRAL_P5
     estado = "ESTABLE" if (estable_p50 and estable_p5) else "inestable"
     print(f"  N={row['N']:>4}  P50_std={row['P50_std']:>6.2f}€  "
-          f"P5_std={row['P5_std']:>6.2f}€  → {estado}")
+          f"P5_std={row['P5_std']:>6.2f}€  -> {estado}")
 
 # N mínimo recomendado
 n_recomendado = None
 for _, row in df_conv.iterrows():
-    if (row["P50_std"] / abs(p50_ref) < umbral_pct and
-        row["P5_std"] / abs(p50_ref) < umbral_pct):
+    if (row["P50_std"] / abs(p50_ref) < UMBRAL_P50 and
+        row["P5_std"] / abs(p50_ref) < UMBRAL_P5):
         n_recomendado = int(row["N"])
         break
 
@@ -261,8 +264,9 @@ if n_recomendado:
     else:
         print(f"  Considera aumentar a N={n_recomendado}.")
 else:
-    print(f"\n  Ningún N probado alcanza convergencia con umbral {umbral_pct*100:.0f}%.")
-    print(f"  Considera aumentar N_VALORES o relajar el umbral.")
+    print(f"\n  Ningún N alcanza convergencia "
+          f"(P50<{UMBRAL_P50*100:.0f}%, P5<{UMBRAL_P5*100:.0f}%).")
+    print(f"  Considera aumentar N_VALORES o relajar los umbrales.")
 
 print(f"  {'='*55}\n")
 

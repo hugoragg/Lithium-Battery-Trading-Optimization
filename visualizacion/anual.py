@@ -149,9 +149,9 @@ def pedir_modo():
     print("  VISUALIZADOR CENTRAL — BATERIA PURA (Arbitraje + aFRR)")
     print("="*58)
     print("  Modos:")
-    print("    det  → Resultados del optimizador (determinista)")
-    print("    sim  → Resultados de simulación Monte Carlo")
-    print("    comp → Comparación determinista vs simulación")
+    print("    det  -> Resultados del optimizador (determinista)")
+    print("    sim  -> Resultados de simulación Monte Carlo")
+    print("    comp -> Comparación determinista vs simulación")
     print("="*58)
     while True:
         modo = input("\n  Modo (det / sim / comp): ").strip().lower()
