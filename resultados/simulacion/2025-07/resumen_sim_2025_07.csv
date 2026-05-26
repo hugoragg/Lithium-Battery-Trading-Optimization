@@ -1,4 +1,4 @@
-fecha,beneficio_previsto [€],ben_medio [€],ben_std [€],ben_P10 [€],ben_P50 [€],ben_P90 [€],VaR_95 [€],pct_negativo [%],desv_media [€],desv_media [%],penalizacion_soc_media [€],energia_recortada_media [MWh],soc_final_desv_media [MWh],soc_critico_medio,pujas_perdidas_media,fallos_tecnicos_media,n_sim_normal
+fecha,beneficio_previsto [€],ben_medio [€],ben_std [€],ben_P10 [€],ben_P50 [€],ben_P90 [€],P5 [€],pct_negativo [%],desv_media [€],desv_media [%],penalizacion_soc_media [€],energia_recortada_media [MWh],soc_final_desv_media [MWh],soc_critico_medio,pujas_perdidas_media,fallos_tecnicos_media,n_sim_normal
 2025-07-01,112.17,100.19,80.74,6.97,86.99,216.8,-13.28,6.0,-11.97,-10.7,29.04,0.2853,-0.2124,6.5,4.9,1.9,200
 2025-07-02,118.17,96.83,93.11,1.78,81.2,215.63,-19.8,9.0,-21.35,-18.1,35.47,0.3266,-0.1474,7.6,5.1,1.9,200
 2025-07-03,188.46,159.9,98.76,57.68,149.39,278.54,41.51,2.5,-28.56,-15.2,29.38,0.3388,-0.1706,6.9,4.6,1.9,200

@@ -213,7 +213,7 @@ Se simulan 200 escenarios por día. La justificación del valor está en §6.4.
 ### 6.4 Análisis de convergencia
 
 `simulacion/convergencia.py` ejecuta el mismo día con N ∈ {25, 50, 100, 150,
-200, 300, 500} simulaciones y mide la varianza del estimador P50/VaR95 entre
+200, 300, 500} simulaciones y mide la varianza del estimador P50/P5 entre
 10 repeticiones independientes. Permite justificar formalmente que N=200
 escenarios normales es suficiente para que el P50 se estabilice por debajo de
 un umbral de 1%.

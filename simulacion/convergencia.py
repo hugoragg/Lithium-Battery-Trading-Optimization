@@ -3,7 +3,7 @@ Análisis de Convergencia Monte Carlo
 Autor: Hugo Raggini Paternain
 -------------------------------
 Comprueba si N=200 simulaciones es suficiente ejecutando el mismo día
-con distintos valores de N y comprobando si P50 y VaR95 se estabilizan.
+con distintos valores de N y comprobando si P50 y P5 se estabilizan.
 
 Uso:
     python -m simulacion.convergencia              # interactivo
@@ -122,14 +122,14 @@ print(f"  Schedule obtenido. Beneficio previsto: {ben_prev:.2f} €\n")
 # =============================================================================
 
 print(f"  Analizando convergencia con {N_REPETICIONES} repeticiones por N...\n")
-print(f"  {'N':>6}  {'P50 medio':>10}  {'P50 std':>8}  {'VaR95 medio':>12}  {'VaR95 std':>10}")
+print(f"  {'N':>6}  {'P50 medio':>10}  {'P50 std':>8}  {'P5 medio':>12}  {'P5 std':>10}")
 print(f"  {'-'*55}")
 
 resultados = []
 
 for n in N_VALORES:
     p50_reps   = []
-    var95_reps = []
+    p5_reps    = []
 
     for rep in range(N_REPETICIONES):
         seed = SEED_BASE + rep * 1000
@@ -143,22 +143,22 @@ for n in N_VALORES:
 
         bens = np.array(bens)
         p50_reps.append(np.percentile(bens, 50))
-        var95_reps.append(np.percentile(bens, 5))
+        p5_reps.append(np.percentile(bens, 5))
 
-    p50_m   = np.mean(p50_reps)
-    p50_s   = np.std(p50_reps)
-    var95_m = np.mean(var95_reps)
-    var95_s = np.std(var95_reps)
+    p50_m = np.mean(p50_reps)
+    p50_s = np.std(p50_reps)
+    p5_m  = np.mean(p5_reps)
+    p5_s  = np.std(p5_reps)
 
     resultados.append({
-        "N":          n,
-        "P50_medio":  p50_m,
-        "P50_std":    p50_s,
-        "VaR95_medio":var95_m,
-        "VaR95_std":  var95_s,
+        "N":         n,
+        "P50_medio": p50_m,
+        "P50_std":   p50_s,
+        "P5_medio":  p5_m,
+        "P5_std":    p5_s,
     })
 
-    print(f"  {n:>6}  {p50_m:>10.2f}€  {p50_s:>7.2f}€  {var95_m:>12.2f}€  {var95_s:>9.2f}€")
+    print(f"  {n:>6}  {p50_m:>10.2f}€  {p50_s:>7.2f}€  {p5_m:>12.2f}€  {p5_s:>9.2f}€")
 
 df_conv = pd.DataFrame(resultados)
 
@@ -206,24 +206,24 @@ ax.set_title("① Convergencia del P50", **TKW)
 _ax(ax, "P50 (€)")
 ax.legend(**GKW)
 
-# Gráfica 2 — Convergencia VaR95
+# Gráfica 2 — Convergencia P5
 ax = axes[1]
-ax.plot(df_conv["N"], df_conv["VaR95_medio"], color=CB, lw=2.5,
-        marker="s", ms=6, label="VaR95 medio")
+ax.plot(df_conv["N"], df_conv["P5_medio"], color=CB, lw=2.5,
+        marker="s", ms=6, label="P5 medio")
 ax.fill_between(df_conv["N"],
-                df_conv["VaR95_medio"] - df_conv["VaR95_std"],
-                df_conv["VaR95_medio"] + df_conv["VaR95_std"],
+                df_conv["P5_medio"] - df_conv["P5_std"],
+                df_conv["P5_medio"] + df_conv["P5_std"],
                 alpha=0.2, color=CB, label="±1 std entre repeticiones")
 
 if 200 in df_conv["N"].values:
-    val_200 = df_conv.loc[df_conv["N"] == 200, "VaR95_medio"].values[0]
+    val_200 = df_conv.loc[df_conv["N"] == 200, "P5_medio"].values[0]
     ax.axvline(200, color=CF, lw=1.5, ls=":", label="N=200 (actual)")
     ax.annotate(f"{val_200:.1f}€", xy=(200, val_200),
-                xytext=(220, val_200 + df_conv["VaR95_std"].mean()),
+                xytext=(220, val_200 + df_conv["P5_std"].mean()),
                 fontsize=8, color=CF, fontweight="bold")
 
-ax.set_title("② Convergencia del VaR 95%", **TKW)
-_ax(ax, "VaR 95% (€)")
+ax.set_title("② Convergencia del P5 (peor 5%)", **TKW)
+_ax(ax, "P5 (€)")
 ax.legend(**GKW)
 
 plt.tight_layout(rect=[0, 0.03, 1, 0.94])
@@ -240,17 +240,17 @@ print(f"\n  {'='*55}")
 print(f"  CONCLUSIÓN")
 print(f"  {'='*55}")
 for _, row in df_conv.iterrows():
-    estable_p50  = row["P50_std"]   / abs(p50_ref) < umbral_pct
-    estable_var  = row["VaR95_std"] / abs(p50_ref) < umbral_pct
-    estado = "ESTABLE" if (estable_p50 and estable_var) else "inestable"
+    estable_p50 = row["P50_std"] / abs(p50_ref) < umbral_pct
+    estable_p5  = row["P5_std"]  / abs(p50_ref) < umbral_pct
+    estado = "ESTABLE" if (estable_p50 and estable_p5) else "inestable"
     print(f"  N={row['N']:>4}  P50_std={row['P50_std']:>6.2f}€  "
-          f"VaR95_std={row['VaR95_std']:>6.2f}€  → {estado}")
+          f"P5_std={row['P5_std']:>6.2f}€  → {estado}")
 
 # N mínimo recomendado
 n_recomendado = None
 for _, row in df_conv.iterrows():
     if (row["P50_std"] / abs(p50_ref) < umbral_pct and
-        row["VaR95_std"] / abs(p50_ref) < umbral_pct):
+        row["P5_std"] / abs(p50_ref) < umbral_pct):
         n_recomendado = int(row["N"])
         break
 

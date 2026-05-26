@@ -102,7 +102,7 @@ ben_n  = df_n["beneficio_real [€]"]
 p10    = ben_n.quantile(0.10)
 p50    = ben_n.quantile(0.50)
 p90    = ben_n.quantile(0.90)
-var95  = ben_n.quantile(0.05)
+p5     = ben_n.quantile(0.05)
 coste_incert = ben_prev - p50
 
 fig1.suptitle(
@@ -120,7 +120,7 @@ ax.hist(ben_n.values, bins=40, range=rango, color=CCH, alpha=0.7,
 ax.axvline(p10,      color=CB,   lw=1.5, ls="--", label=f"P10: {p10:.1f}€")
 ax.axvline(p50,      color=CS,   lw=2,   ls="-",  label=f"P50: {p50:.1f}€")
 ax.axvline(p90,      color=CAU,  lw=1.5, ls="--", label=f"P90: {p90:.1f}€")
-ax.axvline(var95,    color=CB,   lw=2,   ls=":",  label=f"VaR95: {var95:.1f}€")
+ax.axvline(p5,       color=CB,   lw=2,   ls=":",  label=f"P5: {p5:.1f}€")
 ax.axvline(ben_prev, color=CACC, lw=2,   ls="-",  label=f"Previsto: {ben_prev:.1f}€")
 ax.axvline(0, color="#AAAAAA", lw=0.8, ls="--")
 ax.set_title("① Distribución Beneficios", **TKW)
@@ -161,7 +161,7 @@ metricas = [
     ("P10 (pesimista)",      f"{p10:+.2f} €",                        CB),
     ("P50 (mediana)",        f"{p50:+.2f} €",                        CS),
     ("P90 (optimista)",      f"{p90:+.2f} €",                        CAU),
-    ("VaR 95%",              f"{var95:+.2f} €",                      CB),
+    ("P5 (peor 5%)",         f"{p5:+.2f} €",                         CB),
     ("Coste incertidumbre",  f"{coste_incert:+.2f} € ({coste_incert/max(abs(ben_prev),1)*100:.1f}%)", CF),
     ("Media real",           f"{ben_n.mean():+.2f} €",               CS),
     ("Peor escenario",       f"{ben_n.min():+.2f} €",                CRU),

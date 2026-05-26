@@ -391,7 +391,7 @@ def _imprimir_resumen(df_normal: pd.DataFrame, schedule: dict):
     print(f"  P10 (pesimista):                 {ben_n.quantile(0.10):>10.2f} €")
     print(f"  P50 (mediana):                   {ben_n.quantile(0.50):>10.2f} €")
     print(f"  P90 (optimista):                 {ben_n.quantile(0.90):>10.2f} €")
-    print(f"  VaR 95% (peor 5%):               {ben_n.quantile(0.05):>10.2f} €")
+    print(f"  P5 (peor 5%):                    {ben_n.quantile(0.05):>10.2f} €")
     print(f"  % sim. con beneficio < 0:        {(ben_n < 0).mean()*100:>9.1f} %")
     print(f"  Intervalos SOC crítico (media):  {df_normal['intervalos_soc_critico'].mean():>10.1f}")
     print(f"  Energía recortada media:         {df_normal['energia_recortada [MWh]'].mean():>10.3f} MWh")

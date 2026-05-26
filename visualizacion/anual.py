@@ -129,7 +129,7 @@ def agregar_mensual_sim(dfs_sim, meses):
             "p50_medio [€/dia]":       df["ben_P50 [€]"].mean(),
             "p10_medio [€/dia]":       df["ben_P10 [€]"].mean(),
             "p90_medio [€/dia]":       df["ben_P90 [€]"].mean(),
-            "var95_medio [€/dia]":     df["VaR_95 [€]"].mean(),
+            "p5_medio [€/dia]":        df["P5 [€]"].mean(),
             "std_medio [€/dia]":       df["ben_std [€]"].mean(),
             "desv_total [€]":          df["desv_media [€]"].sum(),
             "pct_neg_medio [%]":       df["pct_negativo [%]"].mean(),
@@ -326,8 +326,8 @@ def modo_sim(sim, titulo_rango):
     ax = axes[0, 1]
     ax.plot(x, sim["p50_medio [€/dia]"],  color=CS,  lw=2, marker="o", ms=5, label="P50/día")
     ax.plot(x, sim["p10_medio [€/dia]"],  color=CF,  lw=1.5, marker="s", ms=5, label="P10/día")
-    ax.plot(x, sim["var95_medio [€/dia]"], color=CB, lw=2, marker="^", ms=5, label="P5/día")
-    ax.fill_between(x, sim["var95_medio [€/dia]"], sim["p10_medio [€/dia]"],
+    ax.plot(x, sim["p5_medio [€/dia]"], color=CB, lw=2, marker="^", ms=5, label="P5/día")
+    ax.fill_between(x, sim["p5_medio [€/dia]"], sim["p10_medio [€/dia]"],
                     alpha=0.15, color=CB, label="Zona P5-P10")
     ax.axhline(0, color="#AAAAAA", lw=0.8, ls="--")
     ax.set_title("Percentiles de Riesgo Medio Diario por Mes", **TKW)

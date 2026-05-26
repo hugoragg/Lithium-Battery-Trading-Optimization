@@ -172,7 +172,7 @@ def simular_dia(
         "ben_P10 [€]":                   round(ben_n.quantile(0.10), 2),
         "ben_P50 [€]":                   round(ben_n.quantile(0.50), 2),
         "ben_P90 [€]":                   round(ben_n.quantile(0.90), 2),
-        "VaR_95 [€]":                    round(ben_n.quantile(0.05), 2),
+        "P5 [€]":                        round(ben_n.quantile(0.05), 2),
         "pct_negativo [%]":              round((ben_n < 0).mean() * 100, 1),
         "desv_media [€]":                round((ben_n - schedule["beneficio_previsto"]).mean(), 2),
         "desv_media [%]":                round((ben_n - schedule["beneficio_previsto"]).mean()
@@ -252,9 +252,9 @@ if __name__ == "__main__":
 
         ben_prev = fila_res["beneficio_previsto [€]"]
         ben_p50  = fila_res["ben_P50 [€]"]
-        var      = fila_res["VaR_95 [€]"]
+        p5       = fila_res["P5 [€]"]
         pen      = fila_res["penalizacion_soc_media [€]"]
-        print(f"OK  prev={ben_prev:+.2f}E  P50={ben_p50:+.2f}E  VaR95={var:+.2f}E  penSOC={pen:.2f}E")
+        print(f"OK  prev={ben_prev:+.2f}E  P50={ben_p50:+.2f}E  P5={p5:+.2f}E  penSOC={pen:.2f}E")
 
     df_resumen  = pd.DataFrame(resumen_mensual)
     csv_resumen = CARPETA_SALIDA / f"resumen_sim_{ANIO}_{MES:02d}.csv"
