@@ -17,6 +17,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+# Los titulos usan numeros circulados (①..⑯). DejaVu Sans (fuente por defecto)
+# solo incluye ①..⑩; los ⑪..⑯ saldrian como cuadros vacios. Se anade "Segoe UI
+# Symbol" (presente en Windows) como respaldo: matplotlib hace fallback por glyph,
+# manteniendo el aspecto de DejaVu Sans y tomando de ahi solo los que faltan.
+plt.rcParams["font.family"] = ["DejaVu Sans", "Segoe UI Symbol"]
+
 # =============================================================================
 # CONFIGURACIÓN
 # =============================================================================

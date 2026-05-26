@@ -142,7 +142,7 @@ ax.legend(fontsize=7, framealpha=0.8, edgecolor="none")
 # ③ Box plot
 ax = axes1[1, 0]
 bp = ax.boxplot([ben_n.values],
-                labels=["Simulaciones"],
+                tick_labels=["Simulaciones"],
                 patch_artist=True,
                 medianprops=dict(color="white", lw=2))
 for patch in bp["boxes"]:
