@@ -170,7 +170,7 @@ fig, axes = plt.subplots(1, 2, figsize=(13, 5), facecolor=BG)
 fig.canvas.manager.set_window_title(f"Convergencia Monte Carlo — {fecha_str}")
 fig.suptitle(
     f"ANÁLISIS DE CONVERGENCIA MONTE CARLO — {fecha_str}    "
-    f"[Previsto: {ben_prev:.2f}€  |  Repeticiones por N: {N_REPETICIONES}]",
+    f"[Repeticiones por N: {N_REPETICIONES}]",
     fontsize=11, fontweight="bold", y=0.97
 )
 
@@ -192,7 +192,6 @@ ax.fill_between(df_conv["N"],
                 df_conv["P50_medio"] - df_conv["P50_std"],
                 df_conv["P50_medio"] + df_conv["P50_std"],
                 alpha=0.2, color=CS, label="±1 std entre repeticiones")
-ax.axhline(ben_prev, color=CACC, lw=1.5, ls="--", label=f"Previsto: {ben_prev:.2f}€")
 
 # Marcar N=200
 if 200 in df_conv["N"].values:
